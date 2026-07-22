@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { CalendarDays, Clock, Coffee, RefreshCw, Calendar, Layers, Hash, AlertCircle, X } from 'lucide-react';
 import { ARABIC_DAYS_SHORT } from '../data/sources';
@@ -17,11 +17,12 @@ const REVIEW_MODES: { mode: ReviewMode; label: string; icon: typeof RefreshCw; d
 export default function ScheduleConfigForm() {
   const { scheduleConfig, setScheduleConfig, reviewConfig, setReviewConfig } = useApp();
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
+  const alertTimer = useRef<number | undefined>(undefined);
 
   const showAlert = (msg: string) => {
     setAlertMsg(msg);
-    window.clearTimeout((showAlert as unknown as { _t?: number })._t);
-    (showAlert as unknown as { _t?: number })._t = window.setTimeout(() => setAlertMsg(null), 3000);
+    if (alertTimer.current) window.clearTimeout(alertTimer.current);
+    alertTimer.current = window.setTimeout(() => setAlertMsg(null), 4000);
   };
 
   const toggleOffDay = (dow: number) => {
@@ -30,6 +31,10 @@ export default function ScheduleConfigForm() {
     } else {
       if (scheduleConfig.offDays.length >= MAX_OFF_DAYS) {
         showAlert('لا يمكن اختيار أكثر من يوم إجازة واحد في الأسبوع');
+        return;
+      }
+      if (reviewConfig.enabled && reviewConfig.mode === 'weekly-days' && reviewConfig.weeklyDays.includes(dow)) {
+        showAlert(`لا يمكن اختيار "${ARABIC_DAYS_SHORT[dow]}" كيوم إجازة لأنه مُحدد كيوم مراجعة. احذفه من أيام المراجعة أولاً.`);
         return;
       }
       setScheduleConfig({ offDays: [...scheduleConfig.offDays, dow].sort() });
@@ -42,6 +47,10 @@ export default function ScheduleConfigForm() {
     } else {
       if (reviewConfig.weeklyDays.length >= MAX_REVIEW_DAYS) {
         showAlert('لا يمكن اختيار أكثر من يومين للمراجعة في الأسبوع');
+        return;
+      }
+      if (scheduleConfig.offDays.includes(dow)) {
+        showAlert(`لا يمكن اختيار "${ARABIC_DAYS_SHORT[dow]}" كيوم مراجعة لأنه مُحدد كيوم إجازة. احذفه من أيام الإجازة أولاً.`);
         return;
       }
       setReviewConfig({ weeklyDays: [...reviewConfig.weeklyDays, dow].sort() });
