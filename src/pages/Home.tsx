@@ -9,7 +9,7 @@ export default function Home() {
   const features = [
     { icon: Layers, title: 'خطة تتابعية ذكية', desc: 'التأسيس أولاً ثم التدريب — أو مادة واحدة في اليوم للتحصيلي.', color: 'text-gold-300', bg: 'from-gold-300/10 to-gold-500/5' },
     { icon: CalendarDays, title: 'جدول بتقويم حقيقي', desc: 'حدد تواريخك وأيام إجازتك، ووزّع جدولك على التقويم الفعلي.', color: 'text-sky-400', bg: 'from-sky-400/10 to-sky-600/5' },
-    { icon: Flame, title: 'شعلة الاستمرارية', desc: 'حافظ على شعلتك 🔥 كل يوم تلتزم فيه تزيد الشعلة.', color: 'text-flame-500', bg: 'from-flame-500/10 to-flame-600/5' },
+    { icon: Flame, title: 'شعلة الاستمرارية', desc: 'حافظ على شعلتك كل يوم تلتزم فيه تزيد الشعلة.', color: 'text-flame-500', bg: 'from-flame-500/10 to-flame-600/5' },
     { icon: Target, title: 'مهام مفصلة ودقيقة', desc: 'كل فيديو واختبار له مربع مستقل — تتبع دقيق لكل خطوة.', color: 'text-emerald-400', bg: 'from-emerald-400/10 to-emerald-500/5' },
   ];
 
