@@ -4,6 +4,8 @@ import type {
 } from '../data/sources';
 import { todayISO, addDaysISO, getDayOfWeek, daysBetween } from '../utils/scheduler';
 
+export type { Page };
+
 interface ScheduleConfig {
   startDate: string;
   endDate: string;
@@ -139,7 +141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isSourceSelected = (id: string) => selectedSources.some((s) => s.id === id);
 
   const setInput = (id: string, input: Partial<SourceInput>) => {
-    setInputs((prev) => ({ ...prev, [id]: { videos: 0, tests: 0, ...prev[id], ...input } }));
+    setInputs((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { videos: 0, tests: 0 }), ...input } }));
   };
 
   const setScheduleConfig = (c: Partial<ScheduleConfig>) => setScheduleConfigState((p) => ({ ...p, ...c }));
@@ -225,7 +227,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           const ft = flatTasks[taskIdx];
           if (ft.sourceId !== currentSourceId) {
             currentSourceId = ft.sourceId;
-            phase = tSources.find((s) => s.id === ft.sourceId)?.name;
+            phase = tSources.find((s) => s.id === ft.sourceId)?.name ?? phase;
           }
           dayTasks.push({ id: `${d}-${t}`, type: ft.type, label: ft.label, sourceId: ft.sourceId, done: false });
           taskIdx++;
