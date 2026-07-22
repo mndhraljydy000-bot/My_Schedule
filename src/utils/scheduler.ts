@@ -31,6 +31,10 @@ export function isPast(iso: string): boolean {
   return iso < todayISO();
 }
 
+export function isFuture(iso: string): boolean {
+  return iso > todayISO();
+}
+
 export function hoursUntilTomorrow(): number {
   const now = new Date();
   const tomorrow = new Date(now);
@@ -55,4 +59,20 @@ export function daysBetween(start: string, end: string): number {
   const s = new Date(start + 'T00:00:00').getTime();
   const e = new Date(end + 'T00:00:00').getTime();
   return Math.max(0, Math.round((e - s) / (1000 * 60 * 60 * 24)));
+}
+
+export interface Countdown {
+  days: number;
+  hours: number;
+}
+
+export function getCountdownTo(iso: string): Countdown {
+  const now = new Date();
+  const target = new Date(iso + 'T00:00:00');
+  const diff = target.getTime() - now.getTime();
+  if (diff <= 0) return { days: 0, hours: 0 };
+  const totalHours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(totalHours / 24);
+  const hours = totalHours % 24;
+  return { days, hours };
 }

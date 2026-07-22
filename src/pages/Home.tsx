@@ -100,7 +100,13 @@ export default function Home() {
         </div>
       </section>
 
-      <DeleteConfirmDialog open={showDeleteWarning} onClose={() => setShowDeleteWarning(false)} onConfirm={() => clearSchedule()} title="حذف الجدول" message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء." />
+      <DeleteConfirmDialog
+        open={showDeleteWarning}
+        onClose={() => setShowDeleteWarning(false)}
+        onConfirm={() => { clearSchedule(); setShowDeleteWarning(false); setPage('home'); }}
+        title="حذف الجدول"
+        message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء."
+      />
     </div>
   );
 }

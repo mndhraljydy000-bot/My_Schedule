@@ -4,7 +4,7 @@ import type { ScheduleDay } from '../data/sources';
 import { ARABIC_MONTHS, ARABIC_DAYS_SHORT } from '../data/sources';
 import {
   formatArabicDate, formatArabicDateShort, getDayOfWeek, getDayName,
-  isToday, isPast, hoursUntilTomorrow,
+  isToday, isPast, isFuture, hoursUntilTomorrow, getCountdownTo, type Countdown,
 } from '../utils/scheduler';
 import PomodoroTimer from '../components/PomodoroTimer';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
@@ -16,6 +16,17 @@ import {
 
 const TASK_ICONS = { video: PlayCircle, test: FileText, review: RefreshCw } as const;
 const TASK_COLORS = { video: 'text-sky-400', test: 'text-gold-300', review: 'text-emerald-400' } as const;
+
+function useLiveCountdown(iso: string | null): Countdown {
+  const [countdown, setCountdown] = useState<Countdown>(() => iso ? getCountdownTo(iso) : { days: 0, hours: 0 });
+  useEffect(() => {
+    if (!iso) { setCountdown({ days: 0, hours: 0 }); return; }
+    setCountdown(getCountdownTo(iso));
+    const timer = setInterval(() => setCountdown(getCountdownTo(iso)), 1000);
+    return () => clearInterval(timer);
+  }, [iso]);
+  return countdown;
+}
 
 export default function MySchedule() {
   const {
@@ -120,11 +131,9 @@ export default function MySchedule() {
 
   const selectedDay = schedule.days[selectedDayIdx];
   const allTasksDone = selectedDay?.tasks.every((t) => t.done) ?? false;
-
-  const handleNextDay = () => {
-    if (selectedDay && !selectedDay.done) setShowBlockMsg(true);
-    else setSelectedDayIdx((i) => Math.min(totalDays - 1, i + 1));
-  };
+  const isDayFuture = selectedDay ? isFuture(selectedDay.date) : false;
+  const isDayToday = selectedDay ? isToday(selectedDay.date) : false;
+  const isDayPast = selectedDay ? isPast(selectedDay.date) : false;
 
   return (
     <div className="animate-fade-in px-4 py-8 sm:px-6">
@@ -212,10 +221,13 @@ export default function MySchedule() {
                       const Icon = TASK_ICONS[task.type];
                       const color = TASK_COLORS[task.type];
                       const isDayLocked = selectedDay.done;
+                      const isTaskLocked = isDayLocked || isDayFuture;
                       return (
                         <div key={task.id} className={`flex items-center gap-2.5 rounded-lg border p-2.5 transition-all ${task.done ? 'border-gold-400/30 bg-gold-400/5' : task.type === 'review' ? 'border-emerald-400/20 bg-emerald-400/5' : 'border-ink-700 bg-ink-800/30'}`}>
-                          {isDayLocked ? (
-                            <div className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md border border-gold-400/30 bg-gold-400/10"><Lock className="h-3.5 w-3.5 text-gold-400" /></div>
+                          {isTaskLocked ? (
+                            <div className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md border border-ink-600 bg-ink-800/50">
+                              {task.done ? <CheckCircle2 className="h-5 w-5 text-gold-400" /> : <Lock className="h-3.5 w-3.5 text-ink-500" />}
+                            </div>
                           ) : (
                             <button onClick={() => toggleTaskDone(selectedDay.dayIndex, task.id)} className="grid h-6 w-6 flex-shrink-0 place-items-center rounded-md border transition-all">
                               {task.done ? <CheckCircle2 className="h-6 w-6 text-gold-400" /> : <Circle className="h-6 w-6 text-ink-500 hover:text-ink-300" />}
@@ -234,16 +246,20 @@ export default function MySchedule() {
 
                   {selectedDay.done ? (
                     <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-gold-400/40 bg-gold-400/10 py-3 text-sm font-bold text-gold-300"><CheckCircle2 className="h-5 w-5" />تم إنجاز هذا اليوم</div>
-                  ) : allTasksDone ? (
+                  ) : isDayFuture ? (
+                    <FutureDayCountdown iso={selectedDay.date} />
+                  ) : isDayToday && allTasksDone ? (
                     <button onClick={() => confirmDay(selectedDay.dayIndex)} className="mt-3 w-full rounded-xl bg-gradient-to-b from-gold-300 to-gold-500 py-3 text-sm font-bold text-ink-950 shadow-glow-gold transition-all hover:from-gold-200 hover:to-gold-400 hover:-translate-y-0.5"><CheckCheck className="ml-1 inline h-5 w-5" />تأكيد إنجاز اليوم</button>
-                  ) : (
+                  ) : isDayToday && !allTasksDone ? (
                     <div className="mt-3 rounded-xl border border-ink-600 bg-ink-800/40 py-2.5 text-center text-xs text-ink-300">أكد إنجاز جميع المهام لتأكيد اليوم</div>
-                  )}
+                  ) : isDayPast && !selectedDay.done ? (
+                    <div className="mt-3 flex items-center justify-center gap-2 rounded-xl border border-gold-400/30 bg-gold-400/5 py-2.5 text-xs font-bold text-gold-300"><Clock className="h-4 w-4" />يوم سابق — يمكنك تأكيده الآن</div>
+                  ) : null}
 
                   <div className="mt-4 flex items-center justify-between border-t border-ink-700/50 pt-3">
                     <button onClick={() => setSelectedDayIdx((i) => Math.max(0, i - 1))} disabled={selectedDayIdx === 0} className="flex items-center gap-1 text-xs font-bold text-ink-300 transition-colors hover:text-gold-300 disabled:opacity-30"><ChevronRight className="h-4 w-4" />السابق</button>
                     <span className="text-[11px] text-ink-400">{selectedDayIdx + 1} / {totalDays}</span>
-                    <button onClick={handleNextDay} disabled={selectedDayIdx >= totalDays - 1} className="flex items-center gap-1 text-xs font-bold text-gold-300 transition-colors hover:text-gold-200 disabled:opacity-30">التالي<ChevronLeft className="h-4 w-4" /></button>
+                    <button onClick={() => { if (selectedDay && !selectedDay.done) setShowBlockMsg(true); else setSelectedDayIdx((i) => Math.min(totalDays - 1, i + 1)); }} disabled={selectedDayIdx >= totalDays - 1} className="flex items-center gap-1 text-xs font-bold text-gold-300 transition-colors hover:text-gold-200 disabled:opacity-30">التالي<ChevronLeft className="h-4 w-4" /></button>
                   </div>
                 </>
               ) : (
@@ -273,8 +289,29 @@ export default function MySchedule() {
           </div>
         )}
 
-        <DeleteConfirmDialog open={showDeleteWarning} onClose={() => setShowDeleteWarning(false)} onConfirm={() => { clearSchedule(); setPage('home'); }} title="حذف الجدول" message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء." />
+        <DeleteConfirmDialog
+          open={showDeleteWarning}
+          onClose={() => setShowDeleteWarning(false)}
+          onConfirm={() => { clearSchedule(); setShowDeleteWarning(false); setPage('home'); }}
+          title="حذف الجدول"
+          message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء."
+        />
       </div>
+    </div>
+  );
+}
+
+function FutureDayCountdown({ iso }: { iso: string }) {
+  const countdown = useLiveCountdown(iso);
+  const parts: string[] = [];
+  if (countdown.days > 0) parts.push(`${countdown.days} ${countdown.days === 1 ? 'يوم' : 'يوم'}`);
+  if (countdown.hours > 0) parts.push(`${countdown.hours} ${countdown.hours === 1 ? 'ساعة' : 'ساعة'}`);
+  const display = parts.length > 0 ? parts.join(' و') : 'أقل من ساعة';
+
+  return (
+    <div className="mt-3 rounded-xl border border-sky-400/30 bg-sky-400/10 py-3 text-center">
+      <div className="flex items-center justify-center gap-2 text-sm font-bold text-sky-300"><Clock className="h-5 w-5" />هذا اليوم لم يحن بعد</div>
+      <p className="mt-1 text-xs text-sky-200/80">يفتح خلال {display}</p>
     </div>
   );
 }
