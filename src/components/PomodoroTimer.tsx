@@ -1,96 +1,115 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Coffee, Brain, Settings, X, Check } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Play, Pause, RotateCcw, Clock } from 'lucide-react';
 
-type Phase = 'idle' | 'study' | 'break';
+type Mode = 'focus' | 'break';
+const FOCUS_SECONDS = 25 * 60;
+const BREAK_SECONDS = 5 * 60;
 
 export default function PomodoroTimer() {
-  const [studyMinutes, setStudyMinutes] = useState(55);
-  const [breakMinutes, setBreakMinutes] = useState(5);
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [secondsLeft, setSecondsLeft] = useState(55 * 60);
-  const [showSettings, setShowSettings] = useState(false);
-  const [tempStudy, setTempStudy] = useState(55);
-  const [tempBreak, setTempBreak] = useState(5);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const clearTimer = useCallback(() => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } }, []);
-
-  const playBeep = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-      const osc = ctx.createOscillator(); const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.frequency.value = 880; osc.type = 'sine';
-      gain.gain.setValueAtTime(0.3, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-      osc.start(); osc.stop(ctx.currentTime + 0.5);
-    } catch { /* noop */ }
-  }, []);
-
-  const handlePhaseEnd = useCallback(() => {
-    playBeep();
-    if (phase === 'study') { setPhase('break'); setSecondsLeft(breakMinutes * 60); }
-    else if (phase === 'break') { setPhase('study'); setSecondsLeft(studyMinutes * 60); }
-  }, [phase, studyMinutes, breakMinutes, playBeep]);
+  const [mode, setMode] = useState<Mode>('focus');
+  const [secondsLeft, setSecondsLeft] = useState(FOCUS_SECONDS);
+  const [running, setRunning] = useState(false);
+  const [completed, setCompleted] = useState(0);
+  const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (phase === 'idle') { clearTimer(); return; }
-    intervalRef.current = setInterval(() => { setSecondsLeft((s) => { if (s <= 1) { handlePhaseEnd(); return 0; } return s - 1; }); }, 1000);
-    return clearTimer;
-  }, [phase, handlePhaseEnd, clearTimer]);
+    if (running) {
+      intervalRef.current = window.setInterval(() => {
+        setSecondsLeft((s) => {
+          if (s <= 1) {
+            setRunning(false);
+            if (mode === 'focus') setCompleted((c) => c + 1);
+            const nextMode = mode === 'focus' ? 'break' : 'focus';
+            setMode(nextMode);
+            return nextMode === 'focus' ? FOCUS_SECONDS : BREAK_SECONDS;
+          }
+          return s - 1;
+        });
+      }, 1000);
+    } else if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+    }
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [running, mode]);
 
-  const start = () => { if (phase === 'idle') { setPhase('study'); setSecondsLeft(studyMinutes * 60); } };
-  const pause = () => { clearTimer(); setPhase('idle'); };
-  const reset = () => { clearTimer(); setPhase('idle'); setSecondsLeft(studyMinutes * 60); };
+  const toggle = useCallback(() => setRunning((r) => !r), []);
+  const reset = useCallback(() => {
+    setRunning(false);
+    setSecondsLeft(mode === 'focus' ? FOCUS_SECONDS : BREAK_SECONDS);
+  }, [mode]);
 
-  const saveSettings = () => {
-    setStudyMinutes(Math.max(1, tempStudy)); setBreakMinutes(Math.max(1, tempBreak));
-    if (phase === 'idle') setSecondsLeft(Math.max(1, tempStudy) * 60);
-    setShowSettings(false);
+  const switchMode = (m: Mode) => {
+    setMode(m);
+    setRunning(false);
+    setSecondsLeft(m === 'focus' ? FOCUS_SECONDS : BREAK_SECONDS);
   };
 
-  const mm = Math.floor(secondsLeft / 60); const ss = secondsLeft % 60;
-  const totalSeconds = phase === 'break' ? breakMinutes * 60 : studyMinutes * 60;
-  const pct = totalSeconds > 0 ? ((totalSeconds - secondsLeft) / totalSeconds) * 100 : 0;
-  const isStudy = phase === 'study'; const isBreak = phase === 'break'; const isIdle = phase === 'idle';
+  const mins = Math.floor(secondsLeft / 60);
+  const secs = secondsLeft % 60;
+  const total = mode === 'focus' ? FOCUS_SECONDS : BREAK_SECONDS;
+  const progress = ((total - secondsLeft) / total) * 100;
 
   return (
-    <div className="card overflow-hidden p-0">
-      <div className={`flex items-center justify-between border-b px-5 py-4 transition-colors ${isStudy ? 'border-gold-400/30 bg-gold-400/5' : isBreak ? 'border-sky-400/30 bg-sky-400/5' : 'border-ink-700 bg-ink-850/80'}`}>
-        <div className="flex items-center gap-2">
-          <div className={`grid h-9 w-9 place-items-center rounded-lg ${isStudy ? 'bg-gold-400/15' : isBreak ? 'bg-sky-400/15' : 'bg-ink-800'}`}>
-            {isBreak ? <Coffee className="h-5 w-5 text-sky-400" /> : <Brain className={`h-5 w-5 ${isStudy ? 'text-gold-300' : 'text-ink-300'}`} />}
-          </div>
-          <div><div className="font-display text-base font-bold text-white">{isIdle ? 'مؤقت المذاكرة' : isStudy ? 'وقت المذاكرة' : 'وقت الراحة'}</div><div className="text-[11px] text-ink-300">{isIdle ? `${studyMinutes} دقيقة + ${breakMinutes} راحة` : isStudy ? 'ركز في مذاكرتك' : 'خذ استراحة قصيرة'}</div></div>
-        </div>
-        <button onClick={() => { setTempStudy(studyMinutes); setTempBreak(breakMinutes); setShowSettings(true); }} className="grid h-9 w-9 place-items-center rounded-lg border border-ink-600 bg-ink-800/50 text-ink-200 transition-all hover:border-gold-400/40 hover:text-gold-300"><Settings className="h-4 w-4" /></button>
+    <div className="card p-5">
+      <div className="mb-3 flex items-center gap-2">
+        <Clock className="h-5 w-5 text-gold-300" />
+        <h3 className="font-display text-base font-bold text-white">مؤقت المذاكرة</h3>
       </div>
-      <div className="flex flex-col items-center gap-4 p-6">
-        <div className="relative h-40 w-40">
-          <svg className="h-full w-full -rotate-90" viewBox="0 0 120 120">
-            <circle cx="60" cy="60" r="52" fill="none" strokeWidth="8" className="stroke-ink-800" />
-            <circle cx="60" cy="60" r="52" fill="none" strokeWidth="8" strokeLinecap="round" className={isBreak ? 'stroke-sky-400' : 'stroke-gold-400'} strokeDasharray={2 * Math.PI * 52} strokeDashoffset={2 * Math.PI * 52 * (1 - pct / 100)} style={{ transition: 'stroke-dashoffset 1s linear' }} />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <div className="font-display text-4xl font-black text-white tabular-nums">{String(mm).padStart(2,'0')}:{String(ss).padStart(2,'0')}</div>
-            <div className="mt-1 text-xs font-bold text-ink-300">{isIdle ? 'جاهز للبدء' : isStudy ? 'مذاكرة' : 'راحة'}</div>
+
+      <div className="mb-4 flex gap-2">
+        <button
+          onClick={() => switchMode('focus')}
+          className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+            mode === 'focus' ? 'bg-gold-400/15 text-gold-300 border border-gold-400/40' : 'bg-ink-800/40 text-ink-300 border border-ink-600'
+          }`}
+        >
+          تركيز (٢٥ د)
+        </button>
+        <button
+          onClick={() => switchMode('break')}
+          className={`flex-1 rounded-lg py-2 text-xs font-bold transition-all ${
+            mode === 'break' ? 'bg-emerald-400/15 text-emerald-300 border border-emerald-400/40' : 'bg-ink-800/40 text-ink-300 border border-ink-600'
+          }`}
+        >
+          راحة (٥ د)
+        </button>
+      </div>
+
+      <div className="relative mx-auto mb-4 grid h-32 w-32 place-items-center">
+        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 120 120">
+          <circle cx="60" cy="60" r="54" fill="none" stroke="#22222e" strokeWidth="6" />
+          <circle
+            cx="60" cy="60" r="54" fill="none"
+            stroke={mode === 'focus' ? '#f5b513' : '#34d399'}
+            strokeWidth="6"
+            strokeLinecap="round"
+            strokeDasharray={2 * Math.PI * 54}
+            strokeDashoffset={2 * Math.PI * 54 * (1 - progress / 100)}
+            className="transition-all duration-500"
+          />
+        </svg>
+        <div className="text-center">
+          <div className="font-display text-3xl font-bold text-white">
+            {String(mins).padStart(2, '0')}:{String(secs).padStart(2, '0')}
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {isIdle ? <button onClick={start} className="btn-gold"><Play className="h-5 w-5" />بدء المذاكرة</button>
-          : (<><button onClick={pause} className="btn-ghost"><Pause className="h-4 w-4" />إيقاف مؤقت</button><button onClick={reset} className="btn-ghost"><RotateCcw className="h-4 w-4" />إعادة</button></>)}
+          <div className="text-[10px] text-ink-300">{mode === 'focus' ? 'تركيز' : 'راحة'}</div>
         </div>
       </div>
-      {showSettings && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowSettings(false)}>
-          <div className="card mx-4 max-w-sm animate-pop p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="mb-4 flex items-center justify-between"><h3 className="font-display text-lg font-bold text-white">تعديل وقت المؤقت</h3><button onClick={() => setShowSettings(false)} className="grid h-8 w-8 place-items-center rounded-lg border border-ink-600 bg-ink-800/50 text-ink-200"><X className="h-4 w-4" /></button></div>
-            <div className="space-y-4">
-              <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><Brain className="h-3.5 w-3.5 text-gold-300" />مدة المذاكرة (بالدقائق)</label><input type="number" min={1} max={180} value={tempStudy} onChange={(e) => setTempStudy(Math.max(1, Number(e.target.value)))} className="input-field" /></div>
-              <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><Coffee className="h-3.5 w-3.5 text-sky-400" />مدة الراحة (بالدقائق)</label><input type="number" min={1} max={60} value={tempBreak} onChange={(e) => setTempBreak(Math.max(1, Number(e.target.value)))} className="input-field" /></div>
-            </div>
-            <button onClick={saveSettings} className="btn-gold mt-5 w-full"><Check className="h-5 w-5" />حفظ الإعدادات</button>
-          </div>
+
+      <div className="flex items-center justify-center gap-2">
+        <button onClick={toggle} className="btn-gold px-4 py-2">
+          {running ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          {running ? 'إيقاف' : 'بدء'}
+        </button>
+        <button onClick={reset} className="btn-ghost px-4 py-2">
+          <RotateCcw className="h-4 w-4" />
+          إعادة
+        </button>
+      </div>
+
+      {completed > 0 && (
+        <div className="mt-3 text-center text-xs text-ink-300">
+          جلسات مكتملة: <span className="font-bold text-gold-300">{completed}</span>
         </div>
       )}
     </div>
