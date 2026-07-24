@@ -2,8 +2,6 @@ import { createContext, useContext, useState, useEffect, useMemo, type ReactNode
 import type {
   Page, TestType, Source, SourceInput, Schedule, ScheduleDay, ScheduleTask, ReviewMode,
 } from '../data/sources';
-import { TAHSILI_SUBJECTS } from '../data/sources';
-import type { TahsiliSubject } from '../data/sources';
 import { todayISO, addDaysISO, getDayOfWeek, daysBetween } from '../utils/scheduler';
 
 export type { Page };
@@ -40,9 +38,6 @@ interface AppContextValue {
 
   reviewConfig: ReviewConfig;
   setReviewConfig: (r: Partial<ReviewConfig>) => void;
-
-  tahsiliSubjectOrder: string[];
-  setTahsiliSubjectOrder: (order: string[]) => void;
 
   schedule: Schedule | null;
   generateSchedule: (testType: TestType) => void;
@@ -99,12 +94,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     intervalDays: 6,
     phaseReviewDays: 2,
   });
-  const [tahsiliSubjectOrder, setTahsiliSubjectOrderState] = useState<string[]>(saved.tahsiliSubjectOrder ?? []);
 
   useEffect(() => {
-    const data = { page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder };
+    const data = { page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* noop */ }
-  }, [page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder]);
+  }, [page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig]);
 
   useEffect(() => {
     if (!scheduleConfirmed || !schedule) return;
@@ -160,7 +154,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setScheduleConfig = (c: Partial<ScheduleConfig>) => setScheduleConfigState((p) => ({ ...p, ...c }));
   const setReviewConfig = (r: Partial<ReviewConfig>) => setReviewConfigState((p) => ({ ...p, ...r }));
-  const setTahsiliSubjectOrder = (order: string[]) => setTahsiliSubjectOrderState(order);
 
   const generateSchedule = (testType: TestType) => {
     const tSources = selectedSources.filter((s) => s.testType === testType);
@@ -259,30 +252,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const trainingTasks = roundRobin(trainingSources.map(s => interleaveSource(s, 'التدريب')));
       flatTasks.push(...foundationTasks, ...trainingTasks);
     } else {
-      // Tahsili: sort sources by user-defined subject order, then sequential (videos then tests per source)
-      const orderedSources = [...tSources].sort((a, b) => {
-        const aIdx = tahsiliSubjectOrder.indexOf(a.id);
-        const bIdx = tahsiliSubjectOrder.indexOf(b.id);
-        if (aIdx === -1 && bIdx === -1) return 0;
-        if (aIdx === -1) return 1;
-        if (bIdx === -1) return -1;
-        return aIdx - bIdx;
-      });
-      const orderedPools = orderedSources.map(s => taskPools.find(p => p.sourceId === s.id)!).filter(Boolean);
-      for (const pool of orderedPools) {
-        const s = orderedSources.find(src => src.id === pool.sourceId)!;
-        const inp = inputs[s.id];
-        const max = Math.max(inp.videos, inp.tests);
-        let vIdx = 1, tIdx = 1;
-        for (let i = 0; i < max; i++) {
-          if (vIdx <= inp.videos) {
-            flatTasks.push({ sourceId: s.id, type: 'video', label: `${s.name} - فيديو ${vIdx}`, phase: pool.sourceName });
-            vIdx++;
-          }
-          if (tIdx <= inp.tests) {
-            flatTasks.push({ sourceId: s.id, type: 'test', label: `${s.name} - اختبار ${tIdx}`, phase: pool.sourceName });
-            tIdx++;
-          }
+      // Tahsili: keep original sequential order (all videos then all tests per source)
+      for (const pool of taskPools) {
+        for (const t of pool.tasks) {
+          flatTasks.push({ sourceId: pool.sourceId, type: t.type, label: t.label, phase: pool.sourceName });
         }
       }
     }
@@ -391,7 +364,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     inputs, setInput,
     scheduleConfig, setScheduleConfig,
     reviewConfig, setReviewConfig,
-    tahsiliSubjectOrder, setTahsiliSubjectOrder,
     schedule, generateSchedule, scheduleConfirmed, confirmSchedule, clearSchedule,
     toggleTaskDone, confirmDay,
     streak, progress, completedDays, totalTasks, completedTasks,
