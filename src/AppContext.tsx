@@ -41,6 +41,10 @@ interface AppState {
   lastCompletionDate: string | null;
   showDeleteWarning: boolean;
   setShowDeleteWarning: (v: boolean) => void;
+  navigateToSection: (p: Page) => void;
+  showScheduleExists: boolean;
+  setShowScheduleExists: (v: boolean) => void;
+  pendingPage: Page | null;
 }
 
 const DEFAULT_INPUT: SourceInput = { videos: 0, tests: 0 };
@@ -61,6 +65,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [streak, setStreak] = useState(0);
   const [lastCompletionDate, setLastCompletionDate] = useState<string | null>(null);
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  const [showScheduleExists, setShowScheduleExists] = useState(false);
+  const [pendingPage, setPendingPage] = useState<Page | null>(null);
 
   const toggleSource = useCallback((id: string, name: string, testType: TestType) => {
     setSelectedSources((prev) => prev.find((s) => s.id === id) ? prev.filter((s) => s.id !== id) : [...prev, { id, name, testType }]);
@@ -99,6 +105,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSchedule(generateSchedule(srcs, { ...scheduleConfig, reviewConfig, testType }));
     setScheduleConfirmed(false);
   }, [selectedSources, inputs, scheduleConfig, reviewConfig]);
+
+  const navigateToSection = useCallback((p: Page) => {
+    if (schedule) { setPendingPage(p); setShowScheduleExists(true); return; }
+    setPage(p);
+  }, [schedule]);
 
   const confirmSchedule = useCallback(() => setScheduleConfirmed(true), []);
 
@@ -169,11 +180,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     schedule, scheduleConfirmed, generateSchedule: generateScheduleFn, confirmSchedule, clearSchedule,
     toggleTaskDone, confirmDay, progress, completedDays, totalTasks, completedTasks,
     streak, lastCompletionDate, showDeleteWarning, setShowDeleteWarning,
+    navigateToSection, showScheduleExists, setShowScheduleExists, pendingPage,
   }), [page, selectedSources, toggleSource, isSourceSelected, removeSource, inputs, setInput,
     scheduleConfig, setScheduleConfig, reviewConfig, setReviewConfig,
     schedule, scheduleConfirmed, generateScheduleFn, confirmSchedule, clearSchedule,
     toggleTaskDone, confirmDay, progress, completedDays, totalTasks, completedTasks, streak,
-    lastCompletionDate, showDeleteWarning]);
+    lastCompletionDate, showDeleteWarning, navigateToSection]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

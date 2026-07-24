@@ -385,7 +385,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return Math.round((completedDays / schedule.days.length) * 100);
   }, [schedule, completedDays]);
 
-  const value: AppContextValue = {
+  const value: AppState = {
     page, setPage,
     selectedSources, toggleSource, addSource, removeSource, isSourceSelected,
     inputs, setInput,
@@ -396,6 +396,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     toggleTaskDone, confirmDay,
     streak, progress, completedDays, totalTasks, completedTasks,
     showDeleteWarning, setShowDeleteWarning,
+    navigateToSection, showScheduleExists, setShowScheduleExists, pendingPage,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

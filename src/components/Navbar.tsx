@@ -10,9 +10,12 @@ const NAV_ITEMS: { id: Page; label: string; icon: typeof Home }[] = [
 ];
 
 export default function Navbar() {
-  const { page, setPage, schedule, scheduleConfirmed, streak } = useApp();
+  const { page, navigateToSection, setPage, schedule, scheduleConfirmed, streak } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const handleNav = (p: Page) => { setPage(p); setMobileOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const handleNav = (p: Page) => {
+    if (p === 'qiyas' || p === 'tahsili') { navigateToSection(p); setMobileOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    setPage(p); setMobileOpen(false); window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   return (
     <header className="sticky top-0 z-50 border-b border-ink-700/60 bg-ink-950/85 backdrop-blur-xl">
