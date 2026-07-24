@@ -8,12 +8,10 @@ import {
 } from '../utils/scheduler';
 import PomodoroTimer from '../components/PomodoroTimer';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
-import PostponeModal from '../components/PostponeModal';
 import {
   CalendarDays, CheckCircle2, Circle, PlayCircle, FileText,
   Sparkles, Trash2, Layers, TrendingUp, ChevronRight, ChevronLeft,
   Coffee, Lock, AlertCircle, Flame, CheckCheck, Clock, Check, RefreshCw,
-  CalendarClock,
 } from 'lucide-react';
 
 const TASK_ICONS = { video: PlayCircle, test: FileText, review: RefreshCw } as const;
@@ -44,17 +42,13 @@ export default function MySchedule() {
     const now = new Date(); return { year: now.getFullYear(), month: now.getMonth() };
   });
   const [showBlockMsg, setShowBlockMsg] = useState(false);
-  const [showPostpone, setShowPostpone] = useState(false);
-
-  useEffect(() => {
-    if (schedule) { const [y, m] = schedule.startDate.split('-').map(Number); setCalendarMonth({ year: y, month: m - 1 }); }
-  }, [schedule?.startDate]);
 
   useEffect(() => {
     if (selectedSources.length > 0 && !schedule) {
       const hasValidInput = selectedSources.some((s) => { const inp = inputs[s.id]; return inp && (inp.videos > 0 || inp.tests > 0); });
       if (hasValidInput) generateSchedule(selectedSources[0].testType);
     }
+    if (schedule) { const [y, m] = schedule.startDate.split('-').map(Number); setCalendarMonth({ year: y, month: m - 1 }); }
   }, []);
 
   const dayByDate = useMemo(() => {
@@ -169,13 +163,6 @@ export default function MySchedule() {
         </div>
 
         {scheduleConfig.offDays.length > 0 && (<div className="mb-4 flex items-center gap-2 text-xs text-ink-300"><Coffee className="h-4 w-4 text-gold-300" /><span>أيام الإجازة: {scheduleConfig.offDays.map((d) => ARABIC_DAYS_SHORT[d]).join('، ')}</span></div>)}
-
-        <div className="mb-4 flex justify-end">
-          <button onClick={() => setShowPostpone(true)} className="btn-ghost">
-            <CalendarClock className="h-4 w-4 text-gold-300" />
-            تأجيل المهام
-          </button>
-        </div>
 
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="lg:col-span-3">
@@ -309,8 +296,6 @@ export default function MySchedule() {
           title="حذف الجدول"
           message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء."
         />
-
-        <PostponeModal open={showPostpone} onClose={() => setShowPostpone(false)} />
       </div>
     </div>
   );

@@ -1,195 +1,408 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { ReactNode } from 'react';
-import {
-  type Source, type Schedule, type ScheduleDay, type ScheduleConfig,
-  type Inputs, type TestType, type Page,
-  generateScheduleForSources,
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
+import type {
+  Page, TestType, Source, SourceInput, Schedule, ScheduleDay, ScheduleTask, ReviewMode,
 } from '../data/sources';
-import { addDaysISO } from '../utils/scheduler';
+import { TAHSILI_SUBJECTS } from '../data/sources';
+import type { TahsiliSubject } from '../data/sources';
+import { todayISO, addDaysISO, getDayOfWeek, daysBetween } from '../utils/scheduler';
 
-const STORAGE_KEY = 'thakhasom-mathakra-v1';
+export type { Page };
 
-interface PersistedState {
-  schedule: Schedule | null;
-  scheduleConfirmed: boolean;
-  selectedSources: Source[];
-  inputs: Inputs;
-  scheduleConfig: ScheduleConfig;
+interface ScheduleConfig {
+  startDate: string;
+  endDate: string;
+  offDays: number[];
 }
 
-interface AppContextValue extends PersistedState {
+interface ReviewConfig {
+  enabled: boolean;
+  mode: ReviewMode;
+  weeklyDays: number[];
+  intervalDays: number;
+  phaseReviewDays: number;
+}
+
+interface AppContextValue {
   page: Page;
   setPage: (p: Page) => void;
-  toggleSource: (s: Source) => void;
-  setInputs: (id: string, data: Partial<Inputs[string]>) => void;
-  setScheduleConfig: (data: Partial<ScheduleConfig>) => void;
+
+  selectedSources: Source[];
+  toggleSource: (id: string, name: string, testType: TestType, groupId: string) => void;
+  addSource: (id: string, name: string, testType: TestType, groupId: string) => void;
+  removeSource: (id: string) => void;
+  isSourceSelected: (id: string) => boolean;
+
+  inputs: Record<string, SourceInput>;
+  setInput: (id: string, input: Partial<SourceInput>) => void;
+
+  scheduleConfig: ScheduleConfig;
+  setScheduleConfig: (c: Partial<ScheduleConfig>) => void;
+
+  reviewConfig: ReviewConfig;
+  setReviewConfig: (r: Partial<ReviewConfig>) => void;
+
+  tahsiliSubjectOrder: string[];
+  setTahsiliSubjectOrder: (order: string[]) => void;
+
+  schedule: Schedule | null;
   generateSchedule: (testType: TestType) => void;
+  scheduleConfirmed: boolean;
   confirmSchedule: () => void;
   clearSchedule: () => void;
+
   toggleTaskDone: (dayIndex: number, taskId: string) => void;
   confirmDay: (dayIndex: number) => void;
-  postponeSchedule: (days: number) => void;
-  showDeleteWarning: boolean;
-  setShowDeleteWarning: (b: boolean) => void;
+
+  streak: number;
   progress: number;
   completedDays: number;
-  streak: number;
   totalTasks: number;
   completedTasks: number;
+
+  showDeleteWarning: boolean;
+  setShowDeleteWarning: (v: boolean) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
-import { createContext, useContext } from 'react';
 
-export function useApp() {
-  const ctx = useContext(AppContext);
-  if (!ctx) throw new Error('useApp must be used within AppProvider');
-  return ctx;
-}
+const STORAGE_KEY = 'study-planner-state-v3';
 
-const defaultConfig: ScheduleConfig = {
-  startDate: '',
-  endDate: '',
-  dailyHours: 4,
-  offDays: [],
-};
-
-function loadState(): PersistedState {
+function loadState(): Partial<AppContextValue> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {
-    schedule: null,
-    scheduleConfirmed: false,
-    selectedSources: [],
-    inputs: {},
-    scheduleConfig: defaultConfig,
-  };
-}
-
-function calculateStreak(days: ScheduleDay[]): number {
-  let streak = 0;
-  const sorted = [...days].sort((a, b) => b.date.localeCompare(a.date));
-  for (const d of sorted) {
-    if (d.done) streak++;
-    else break;
-  }
-  return streak;
+    if (!raw) return {};
+    return JSON.parse(raw);
+  } catch { return {}; }
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const persisted = loadState();
-  const [page, setPage] = useState<Page>('home');
-  const [schedule, setSchedule] = useState<Schedule | null>(persisted.schedule);
-  const [scheduleConfirmed, setScheduleConfirmed] = useState(persisted.scheduleConfirmed);
-  const [selectedSources, setSelectedSources] = useState<Source[]>(persisted.selectedSources);
-  const [inputs, setInputsState] = useState<Inputs>(persisted.inputs);
-  const [scheduleConfig, setScheduleConfigState] = useState<ScheduleConfig>(persisted.scheduleConfig);
+  const saved = useMemo(loadState, []);
+
+  const [page, setPage] = useState<Page>(saved.page ?? 'home');
+  const [selectedSources, setSelectedSources] = useState<Source[]>(saved.selectedSources ?? []);
+  const [inputs, setInputs] = useState<Record<string, SourceInput>>(saved.inputs ?? {});
+  const [schedule, setSchedule] = useState<Schedule | null>(saved.schedule ?? null);
+  const [scheduleConfirmed, setScheduleConfirmed] = useState<boolean>(saved.scheduleConfirmed ?? false);
+  const [streak, setStreak] = useState<number>(saved.streak ?? 0);
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
 
-  useEffect(() => {
-    const state: PersistedState = { schedule, scheduleConfirmed, selectedSources, inputs, scheduleConfig };
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch {}
-  }, [schedule, scheduleConfirmed, selectedSources, inputs, scheduleConfig]);
+  const [scheduleConfig, setScheduleConfigState] = useState<ScheduleConfig>(saved.scheduleConfig ?? {
+    startDate: todayISO(),
+    endDate: addDaysISO(todayISO(), 30),
+    offDays: [5],
+  });
+
+  const [reviewConfig, setReviewConfigState] = useState<ReviewConfig>(saved.reviewConfig ?? {
+    enabled: true,
+    mode: 'phase-end',
+    weeklyDays: [4],
+    intervalDays: 6,
+    phaseReviewDays: 2,
+  });
+  const [tahsiliSubjectOrder, setTahsiliSubjectOrderState] = useState<string[]>(saved.tahsiliSubjectOrder ?? []);
 
   useEffect(() => {
-    if (schedule && scheduleConfirmed) setPage('schedule');
-  }, []);
+    const data = { page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* noop */ }
+  }, [page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder]);
 
-  const toggleSource = useCallback((s: Source) => {
+  useEffect(() => {
+    if (!scheduleConfirmed || !schedule) return;
+    const today = todayISO();
+    const allDoneToday = schedule.days.find((d) => d.date === today)?.done;
+    if (allDoneToday) {
+      const lastSeen = localStorage.getItem('study-planner-last-streak-day');
+      if (lastSeen !== today) {
+        setStreak((s) => s + 1);
+        localStorage.setItem('study-planner-last-streak-day', today);
+      }
+    }
+  }, [scheduleConfirmed, schedule]);
+
+  const toggleSource = (id: string, name: string, testType: TestType, groupId: string) => {
     setSelectedSources((prev) => {
-      const exists = prev.find((x) => x.id === s.id);
-      if (exists) return prev.filter((x) => x.id !== s.id);
-      return [...prev, s];
+      const existing = prev.find((s) => s.id === id);
+      if (existing) {
+        const filtered = prev.filter((s) => s.id !== id);
+        setInputs((inp) => { const n = { ...inp }; delete n[id]; return n; });
+        return filtered;
+      }
+      const withoutGroup = prev.filter((s) => s.groupId !== groupId || s.testType !== testType);
+      const removedIds = prev.filter((s) => s.groupId === groupId && s.testType === testType).map((s) => s.id);
+      if (removedIds.length > 0) {
+        setInputs((inp) => {
+          const n = { ...inp };
+          for (const rid of removedIds) delete n[rid];
+          return n;
+        });
+      }
+      return [...withoutGroup, { id, name, testType, description: '', groupId }];
     });
-  }, []);
+  };
 
-  const setInputs = useCallback((id: string, data: Partial<Inputs[string]>) => {
-    setInputsState((prev) => ({ ...prev, [id]: { ...prev[id], ...data } }));
-  }, []);
+  const addSource = (id: string, name: string, testType: TestType, groupId: string) => {
+    setSelectedSources((prev) => {
+      if (prev.find((s) => s.id === id)) return prev;
+      return [...prev, { id, name, testType, description: '', groupId }];
+    });
+  };
 
-  const setScheduleConfig = useCallback((data: Partial<ScheduleConfig>) => {
-    setScheduleConfigState((prev) => ({ ...prev, ...data }));
-  }, []);
+  const removeSource = (id: string) => {
+    setSelectedSources((prev) => prev.filter((s) => s.id !== id));
+    setInputs((prev) => { const n = { ...prev }; delete n[id]; return n; });
+  };
 
-  const generateSchedule = useCallback((testType: TestType) => {
-    const sources = selectedSources.filter((s) => s.testType === testType);
-    if (sources.length === 0) return;
-    const sched = generateScheduleForSources(sources, inputs, scheduleConfig);
-    setSchedule(sched);
+  const isSourceSelected = (id: string) => selectedSources.some((s) => s.id === id);
+
+  const setInput = (id: string, input: Partial<SourceInput>) => {
+    setInputs((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { videos: 0, tests: 0 }), ...input } }));
+  };
+
+  const setScheduleConfig = (c: Partial<ScheduleConfig>) => setScheduleConfigState((p) => ({ ...p, ...c }));
+  const setReviewConfig = (r: Partial<ReviewConfig>) => setReviewConfigState((p) => ({ ...p, ...r }));
+  const setTahsiliSubjectOrder = (order: string[]) => setTahsiliSubjectOrderState(order);
+
+  const generateSchedule = (testType: TestType) => {
+    const tSources = selectedSources.filter((s) => s.testType === testType);
+    if (tSources.length === 0) {
+      setSchedule({ testType, startDate: scheduleConfig.startDate, endDate: scheduleConfig.endDate, days: [], totalVideos: 0, totalTests: 0, error: 'لم تختر أي مصادر بعد' });
+      return;
+    }
+
+    for (const s of tSources) {
+      const inp = inputs[s.id];
+      if (!inp || (inp.videos <= 0 && inp.tests <= 0)) {
+        setSchedule({ testType, startDate: scheduleConfig.startDate, endDate: scheduleConfig.endDate, days: [], totalVideos: 0, totalTests: 0, error: `أدخل عدداً للفيديوهات أو الاختبارات لـ "${s.name}"` });
+        return;
+      }
+    }
+
+    const { startDate, endDate, offDays } = scheduleConfig;
+    if (!startDate || !endDate || new Date(endDate) < new Date(startDate)) {
+      setSchedule({ testType, startDate, endDate, days: [], totalVideos: 0, totalTests: 0, error: 'تحقق من تواريخ البداية والنهاية' });
+      return;
+    }
+    if (startDate < todayISO()) {
+      setSchedule({ testType, startDate, endDate, days: [], totalVideos: 0, totalTests: 0, error: 'لا يمكن اختيار تاريخ بداية سابق. اختر تاريخ اليوم أو أي تاريخ مستقبلي' });
+      return;
+    }
+
+    const taskPools: { sourceId: string; sourceName: string; tasks: { type: 'video' | 'test'; label: string }[] }[] = [];
+    let totalVideos = 0;
+    let totalTests = 0;
+    for (const s of tSources) {
+      const inp = inputs[s.id];
+      const tasks: { type: 'video' | 'test'; label: string }[] = [];
+      for (let i = 1; i <= inp.videos; i++) { tasks.push({ type: 'video', label: `${s.name} - فيديو ${i}` }); totalVideos++; }
+      for (let i = 1; i <= inp.tests; i++) { tasks.push({ type: 'test', label: `${s.name} - اختبار ${i}` }); totalTests++; }
+      taskPools.push({ sourceId: s.id, sourceName: s.name, tasks });
+    }
+
+    const maxDays = Math.max(1, daysBetween(startDate, endDate) + 1);
+    const isOffDay = (iso: string) => offDays.includes(getDayOfWeek(iso));
+
+    const studyDates: string[] = [];
+    for (let i = 0; i < maxDays; i++) {
+      const iso = addDaysISO(startDate, i);
+      if (!isOffDay(iso)) studyDates.push(iso);
+    }
+
+    if (studyDates.length === 0) {
+      setSchedule({ testType, startDate, endDate, days: [], totalVideos, totalTests, error: 'لا توجد أيام دراسة متاحة (كلها إجازة؟)' });
+      return;
+    }
+
+    // Build flat interleaved task list
+    type FlatTask = { sourceId: string; type: 'video' | 'test'; label: string; phase: string };
+    const flatTasks: FlatTask[] = [];
+
+    if (testType === 'qiyas') {
+      // Qiyas: interleave videos and tests evenly within each phase,
+      // merge quant + verbal training together
+      const foundationSources = tSources.filter(s => s.groupId === 'foundation');
+      const trainingSources = tSources.filter(s => s.groupId === 'training-quant' || s.groupId === 'training-verbal');
+
+      // Interleave videos and tests for a single source evenly
+      const interleaveSource = (s: typeof tSources[0], phaseLabel: string): FlatTask[] => {
+        const inp = inputs[s.id];
+        const result: FlatTask[] = [];
+        const max = Math.max(inp.videos, inp.tests);
+        let vIdx = 1, tIdx = 1;
+        for (let i = 0; i < max; i++) {
+          if (vIdx <= inp.videos) {
+            result.push({ sourceId: s.id, type: 'video', label: `${s.name} - فيديو ${vIdx}`, phase: phaseLabel });
+            vIdx++;
+          }
+          if (tIdx <= inp.tests) {
+            result.push({ sourceId: s.id, type: 'test', label: `${s.name} - اختبار ${tIdx}`, phase: phaseLabel });
+            tIdx++;
+          }
+        }
+        return result;
+      };
+
+      // Round-robin across multiple sources within a phase
+      const roundRobin = (sourceTaskLists: FlatTask[][]): FlatTask[] => {
+        const result: FlatTask[] = [];
+        let added = true;
+        while (added) {
+          added = false;
+          for (const list of sourceTaskLists) {
+            if (list.length > 0) { result.push(list.shift()!); added = true; }
+          }
+        }
+        return result;
+      };
+
+      // Foundation phase first, then training phase (quant + verbal merged)
+      const foundationTasks = roundRobin(foundationSources.map(s => interleaveSource(s, 'التأسيس')));
+      const trainingTasks = roundRobin(trainingSources.map(s => interleaveSource(s, 'التدريب')));
+      flatTasks.push(...foundationTasks, ...trainingTasks);
+    } else {
+      // Tahsili: sort sources by user-defined subject order, then sequential (videos then tests per source)
+      const orderedSources = [...tSources].sort((a, b) => {
+        const aIdx = tahsiliSubjectOrder.indexOf(a.id);
+        const bIdx = tahsiliSubjectOrder.indexOf(b.id);
+        if (aIdx === -1 && bIdx === -1) return 0;
+        if (aIdx === -1) return 1;
+        if (bIdx === -1) return -1;
+        return aIdx - bIdx;
+      });
+      const orderedPools = orderedSources.map(s => taskPools.find(p => p.sourceId === s.id)!).filter(Boolean);
+      for (const pool of orderedPools) {
+        const s = orderedSources.find(src => src.id === pool.sourceId)!;
+        const inp = inputs[s.id];
+        const max = Math.max(inp.videos, inp.tests);
+        let vIdx = 1, tIdx = 1;
+        for (let i = 0; i < max; i++) {
+          if (vIdx <= inp.videos) {
+            flatTasks.push({ sourceId: s.id, type: 'video', label: `${s.name} - فيديو ${vIdx}`, phase: pool.sourceName });
+            vIdx++;
+          }
+          if (tIdx <= inp.tests) {
+            flatTasks.push({ sourceId: s.id, type: 'test', label: `${s.name} - اختبار ${tIdx}`, phase: pool.sourceName });
+            tIdx++;
+          }
+        }
+      }
+    }
+
+    const tasksPerDay = Math.max(1, Math.ceil(flatTasks.length / studyDates.length));
+
+    const days: ScheduleDay[] = [];
+    let taskIdx = 0;
+    let studyDaysSinceReview = 0;
+    let currentPhase = flatTasks[0]?.phase ?? '';
+
+    for (let d = 0; d < studyDates.length; d++) {
+      const date = studyDates[d];
+
+      let isReview = false;
+      if (reviewConfig.enabled) {
+        if (reviewConfig.mode === 'weekly-days' && reviewConfig.weeklyDays.includes(getDayOfWeek(date))) isReview = true;
+        else if (reviewConfig.mode === 'interval-days' && studyDaysSinceReview >= reviewConfig.intervalDays) isReview = true;
+        else if (reviewConfig.mode === 'phase-end' && flatTasks[taskIdx] && flatTasks[taskIdx].phase !== currentPhase && currentPhase) {
+          const prevPhase = currentPhase;
+          for (let r = 0; r < reviewConfig.phaseReviewDays && d < studyDates.length; r++) {
+            days.push({ dayIndex: days.length, date: studyDates[d], tasks: [{ id: `rev-${days.length}`, type: 'review', label: `مراجعة مرحلية - ${prevPhase}`, sourceId: 'review', done: false }], phase: 'مراجعة', isReviewDay: true, done: false });
+            d++;
+          }
+          if (d < studyDates.length) currentPhase = flatTasks[taskIdx]?.phase ?? currentPhase;
+          studyDaysSinceReview = 0;
+        }
+      }
+
+      if (d >= studyDates.length) break;
+
+      const dayTasks: ScheduleTask[] = [];
+      if (!isReview) {
+        const phase = flatTasks[taskIdx]?.phase ?? currentPhase;
+        for (let t = 0; t < tasksPerDay && taskIdx < flatTasks.length; t++) {
+          const ft = flatTasks[taskIdx];
+          dayTasks.push({ id: `${d}-${t}`, type: ft.type, label: ft.label, sourceId: ft.sourceId, done: false });
+          taskIdx++;
+        }
+        studyDaysSinceReview++;
+        days.push({ dayIndex: days.length, date, tasks: dayTasks, phase, isReviewDay: false, done: false });
+      } else {
+        dayTasks.push({ id: `rev-${d}`, type: 'review', label: 'يوم مراجعة - راجع ما سبق', sourceId: 'review', done: false });
+        studyDaysSinceReview = 0;
+        days.push({ dayIndex: days.length, date, tasks: dayTasks, phase: 'مراجعة', isReviewDay: true, done: false });
+      }
+
+      if (taskIdx >= flatTasks.length && !reviewConfig.enabled) break;
+    }
+
+    const endDateActual = days.length > 0 ? days[days.length - 1].date : endDate;
+    setSchedule({ testType, startDate, endDate: endDateActual, days, totalVideos, totalTests });
     setScheduleConfirmed(false);
-    setPage('schedule');
-  }, [selectedSources, inputs, scheduleConfig]);
+  };
 
-  const confirmSchedule = useCallback(() => {
-    setScheduleConfirmed(true);
-  }, []);
+  const confirmSchedule = () => setScheduleConfirmed(true);
 
-  const clearSchedule = useCallback(() => {
+  const clearSchedule = () => {
     setSchedule(null);
     setScheduleConfirmed(false);
+    setStreak(0);
+    setInputs({});
     setSelectedSources([]);
-    setInputsState({});
-    setScheduleConfigState(defaultConfig);
-    setPage('home');
-  }, []);
+    try { localStorage.removeItem('study-planner-last-streak-day'); } catch { /* noop */ }
+  };
 
-  const toggleTaskDone = useCallback((dayIndex: number, taskId: string) => {
+  const toggleTaskDone = (dayIndex: number, taskId: string) => {
     setSchedule((prev) => {
       if (!prev) return prev;
-      const days = prev.days.map((d) => {
-        if (d.dayIndex !== dayIndex) return d;
-        const tasks = d.tasks.map((t) => t.id === taskId ? { ...t, done: !t.done } : t);
-        return { ...d, tasks };
-      });
-      return { ...prev, days };
+      return {
+        ...prev,
+        days: prev.days.map((d) => d.dayIndex === dayIndex
+          ? { ...d, tasks: d.tasks.map((t) => t.id === taskId ? { ...t, done: !t.done } : t) }
+          : d),
+      };
     });
-  }, []);
+  };
 
-  const confirmDay = useCallback((dayIndex: number) => {
+  const confirmDay = (dayIndex: number) => {
     setSchedule((prev) => {
       if (!prev) return prev;
-      const days = prev.days.map((d) => {
-        if (d.dayIndex !== dayIndex) return d;
-        const tasks = d.tasks.map((t) => ({ ...t, done: true }));
-        return { ...d, tasks, done: true };
-      });
-      return { ...prev, days };
+      return {
+        ...prev,
+        days: prev.days.map((d) => d.dayIndex === dayIndex ? { ...d, done: true } : d),
+      };
     });
-  }, []);
+    const today = todayISO();
+    const lastSeen = localStorage.getItem('study-planner-last-streak-day');
+    if (lastSeen !== today) {
+      setStreak((s) => s + 1);
+      localStorage.setItem('study-planner-last-streak-day', today);
+    }
+  };
 
-  const postponeSchedule = useCallback((days: number) => {
-    setSchedule((prev) => {
-      if (!prev || prev.days.length === 0) return prev;
-      const newStartDate = addDaysISO(prev.startDate, days);
-      const newEndDate = addDaysISO(prev.endDate, days);
-      const newDays = prev.days.map((d) => ({ ...d, date: addDaysISO(d.date, days) }));
-      return { ...prev, startDate: newStartDate, endDate: newEndDate, days: newDays };
-    });
-    setScheduleConfigState((prev) => ({
-      ...prev,
-      startDate: addDaysISO(prev.startDate, days),
-      endDate: addDaysISO(prev.endDate, days),
-    }));
-  }, []);
-
-  const totalTasks = schedule?.days.reduce((acc, d) => acc + d.tasks.length, 0) ?? 0;
-  const completedTasks = schedule?.days.reduce((acc, d) => acc + d.tasks.filter((t) => t.done).length, 0) ?? 0;
-  const completedDays = schedule?.days.filter((d) => d.done).length ?? 0;
-  const progress = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
-  const streak = schedule ? calculateStreak(schedule.days) : 0;
+  const totalTasks = useMemo(() => schedule?.days.reduce((a, d) => a + d.tasks.length, 0) ?? 0, [schedule]);
+  const completedTasks = useMemo(() => schedule?.days.reduce((a, d) => a + d.tasks.filter((t) => t.done).length, 0) ?? 0, [schedule]);
+  const completedDays = useMemo(() => schedule?.days.filter((d) => d.done).length ?? 0, [schedule]);
+  const progress = useMemo(() => {
+    if (!schedule || schedule.days.length === 0) return 0;
+    return Math.round((completedDays / schedule.days.length) * 100);
+  }, [schedule, completedDays]);
 
   const value: AppContextValue = {
     page, setPage,
-    schedule, scheduleConfirmed,
-    selectedSources, inputs, scheduleConfig,
-    toggleSource, setInputs, setScheduleConfig,
-    generateSchedule, confirmSchedule, clearSchedule,
-    toggleTaskDone, confirmDay, postponeSchedule,
+    selectedSources, toggleSource, addSource, removeSource, isSourceSelected,
+    inputs, setInput,
+    scheduleConfig, setScheduleConfig,
+    reviewConfig, setReviewConfig,
+    tahsiliSubjectOrder, setTahsiliSubjectOrder,
+    schedule, generateSchedule, scheduleConfirmed, confirmSchedule, clearSchedule,
+    toggleTaskDone, confirmDay,
+    streak, progress, completedDays, totalTasks, completedTasks,
     showDeleteWarning, setShowDeleteWarning,
-    progress, completedDays, streak, totalTasks, completedTasks,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+export function useApp(): AppContextValue {
+  const ctx = useContext(AppContext);
+  if (!ctx) throw new Error('useApp must be used within AppProvider');
+  return ctx;
 }
