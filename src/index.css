@@ -19,6 +19,9 @@
   .btn-gold {
     @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-gold-300 to-gold-500 px-6 py-3 text-sm font-bold text-ink-950 shadow-glow-gold transition-all hover:from-gold-200 hover:to-gold-400 hover:-translate-y-0.5 active:translate-y-0;
   }
+  .btn-gold:disabled {
+    @apply from-ink-600 to-ink-700 text-ink-400 shadow-none cursor-not-allowed hover:from-ink-600 hover:to-ink-700 hover:translate-y-0;
+  }
   .btn-sky {
     @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-b from-sky-400 to-sky-600 px-6 py-3 text-sm font-bold text-white shadow-glow-sky transition-all hover:from-sky-300 hover:to-sky-500 hover:-translate-y-0.5 active:translate-y-0;
   }

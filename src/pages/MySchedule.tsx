@@ -8,11 +8,14 @@ import {
 } from '../utils/scheduler';
 import PomodoroTimer from '../components/PomodoroTimer';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import TelegramGate from '../components/TelegramGate';
 import {
   CalendarDays, CheckCircle2, Circle, PlayCircle, FileText,
   Sparkles, Trash2, Layers, TrendingUp, ChevronRight, ChevronLeft,
   Coffee, Lock, AlertCircle, Flame, CheckCheck, Clock, Check, RefreshCw,
+  CalendarClock, Plane, X,
 } from 'lucide-react';
+import { todayISO, addDaysISO, formatArabicDateShort } from '../utils/scheduler';
 
 const TASK_ICONS = { video: PlayCircle, test: FileText, review: RefreshCw } as const;
 const TASK_COLORS = { video: 'text-sky-400', test: 'text-gold-300', review: 'text-emerald-400' } as const;
@@ -33,7 +36,8 @@ export default function MySchedule() {
     schedule, scheduleConfirmed, confirmSchedule, selectedSources,
     toggleTaskDone, confirmDay, clearSchedule, setPage, generateSchedule,
     inputs, scheduleConfig, progress, completedDays, streak,
-    totalTasks, completedTasks, showDeleteWarning, setShowDeleteWarning,
+    totalTasks, completedTasks, showDeleteWarning, setShowDeleteWarning, postponeTasks,
+    telegramVerified, setTelegramGate, setTelegramVerified,
   } = useApp();
 
   const [selectedDayIdx, setSelectedDayIdx] = useState(0);
@@ -42,12 +46,38 @@ export default function MySchedule() {
     const now = new Date(); return { year: now.getFullYear(), month: now.getMonth() };
   });
   const [showBlockMsg, setShowBlockMsg] = useState(false);
+  const [showPostpone, setShowPostpone] = useState(false);
+  const [postponeDays, setPostponeDays] = useState(1);
+  const [postponeDone, setPostponeDone] = useState(false);
+  const [rejoinGateOpen, setRejoinGateOpen] = useState(false);
+
+  // Background membership check on page load / refresh
+  useEffect(() => {
+    if (!scheduleConfirmed || !telegramVerified) return;
+    const stored = localStorage.getItem('tg_user_id');
+    if (!stored) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+        const res = await fetch(`${supabaseUrl}/functions/v1/telegram-verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'check', telegramUserId: Number(stored) }),
+        });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.ok && !data.isMember) {
+          setTelegramVerified(false);
+          try { localStorage.setItem('tg_verified', 'false'); } catch { /* noop */ }
+          setRejoinGateOpen(true);
+        }
+      } catch { /* network error - don't lock user out */ }
+    })();
+    return () => { cancelled = true; };
+  }, [scheduleConfirmed, telegramVerified, setTelegramVerified]);
 
   useEffect(() => {
-    if (selectedSources.length > 0 && !schedule) {
-      const hasValidInput = selectedSources.some((s) => { const inp = inputs[s.id]; return inp && (inp.videos > 0 || inp.tests > 0); });
-      if (hasValidInput) generateSchedule(selectedSources[0].testType);
-    }
     if (schedule) { const [y, m] = schedule.startDate.split('-').map(Number); setCalendarMonth({ year: y, month: m - 1 }); }
   }, []);
 
@@ -93,16 +123,17 @@ export default function MySchedule() {
             <p className="mb-4 text-sm text-ink-300">من {formatArabicDate(schedule.startDate)} إلى {formatArabicDate(schedule.endDate)}</p>
             <div className="space-y-2">
               {schedule.days.slice(0, 7).map((day) => (
-                <div key={day.dayIndex} className={`flex items-center gap-3 rounded-xl border p-3 ${day.isReviewDay ? 'border-emerald-400/30 bg-emerald-400/5' : 'border-ink-700 bg-ink-800/40'}`}>
+                <div key={day.dayIndex} className={`flex items-center gap-3 rounded-xl border p-3 ${day.isReviewDay ? 'border-emerald-400/30 bg-emerald-400/5' : day.isRestDay ? 'border-sky-400/30 bg-sky-400/5' : 'border-ink-700 bg-ink-800/40'}`}>
                   <span className="grid h-7 w-7 place-items-center rounded-lg bg-ink-800 font-display text-xs font-bold text-gold-300">{day.dayIndex + 1}</span>
                   <div className="flex-1">
                     <div className="text-xs font-bold text-ink-200">{formatArabicDateShort(day.date)} - {getDayName(day.date)}</div>
                     <div className="flex items-center gap-2">
-                      {day.phase && <span className={`chip ${day.isReviewDay ? 'border-emerald-400/30 text-emerald-400' : 'border-gold-400/30 text-gold-300'}`}>{day.phase}</span>}
-                      <span className="text-[11px] text-ink-300">{day.tasks.length} مهمة</span>
+                      {day.phase && <span className={`chip ${day.isReviewDay ? 'border-emerald-400/30 text-emerald-400' : day.isRestDay ? 'border-sky-400/30 text-sky-400' : 'border-gold-400/30 text-gold-300'}`}>{day.phase}</span>}
+                      <span className="text-[11px] text-ink-300">{day.isRestDay ? 'يوم راحة' : `${day.tasks.length} مهمة`}</span>
                     </div>
                   </div>
                   {day.isReviewDay && <RefreshCw className="h-4 w-4 text-emerald-400" />}
+                  {day.isRestDay && <Coffee className="h-4 w-4 text-sky-400" />}
                 </div>
               ))}
               {schedule.days.length > 7 && <p className="text-center text-xs text-ink-400">... و {schedule.days.length - 7} أيام أخرى</p>}
@@ -162,6 +193,10 @@ export default function MySchedule() {
           <StatCard icon={TrendingUp} label="نسبة الإنجاز" value={`${progress}%`} color="sky" />
         </div>
 
+        <div className="mb-6 flex justify-center">
+          <button onClick={() => { setPostponeDays(1); setPostponeDone(false); setShowPostpone(true); }} className="btn-ghost w-full sm:w-auto"><CalendarClock className="h-4 w-4 text-sky-400" />تأجيل المهام</button>
+        </div>
+
         {scheduleConfig.offDays.length > 0 && (<div className="mb-4 flex items-center gap-2 text-xs text-ink-300"><Coffee className="h-4 w-4 text-gold-300" /><span>أيام الإجازة: {scheduleConfig.offDays.map((d) => ARABIC_DAYS_SHORT[d]).join('، ')}</span></div>)}
 
         <div className="grid gap-6 lg:grid-cols-5">
@@ -187,14 +222,16 @@ export default function MySchedule() {
                   const isReview = schedDay?.isReviewDay;
                   return (
                     <button key={i} onClick={() => { if (schedDay) { const idx = schedule.days.findIndex((d) => d.date === iso); if (idx >= 0) setSelectedDayIdx(idx); } }}
-                      className={`relative min-h-[64px] border-b border-l border-ink-800/40 p-1.5 text-right transition-colors ${schedDay ? 'cursor-pointer hover:bg-ink-800/40' : 'cursor-default'} ${today ? 'ring-2 ring-gold-400/50 ring-inset' : ''} ${isReview ? 'bg-emerald-400/5' : ''}`}>
+                      className={`relative min-h-[64px] border-b border-l border-ink-800/40 p-1.5 text-right transition-colors ${schedDay ? 'cursor-pointer hover:bg-ink-800/40' : 'cursor-default'} ${today ? 'ring-2 ring-gold-400/50 ring-inset' : ''} ${isReview ? 'bg-emerald-400/5' : ''} ${schedDay?.isRestDay ? 'bg-sky-400/5' : ''}`}>
                       <div className="flex items-center justify-between">
                         <span className={`text-xs font-bold ${today ? 'text-gold-300' : isOff ? 'text-ink-400' : 'text-ink-200'}`}>{dayNum}</span>
                         {allDone && <CheckCircle2 className="h-3.5 w-3.5 text-gold-400" />}
                         {isReview && !allDone && <RefreshCw className="h-3 w-3 text-emerald-400" />}
+                        {schedDay?.isRestDay && <Coffee className="h-3 w-3 text-sky-400" />}
                       </div>
                       {hasTasks && (<div className="mt-1 flex flex-wrap gap-0.5">{schedDay.tasks.slice(0, 4).map((t) => (<span key={t.id} className={`h-1.5 w-1.5 rounded-full ${t.done ? 'bg-gold-400' : t.type === 'review' ? 'bg-emerald-400/60' : 'bg-sky-400/60'}`} />))}</div>)}
-                      {isOff && !hasTasks && (<div className="mt-0.5 text-[9px] text-ink-400">إجازة</div>)}
+                      {schedDay?.isRestDay && !hasTasks && (<div className="mt-0.5 text-[9px] text-sky-400/70">إجازة</div>)}
+                      {isOff && !hasTasks && !schedDay && (<div className="mt-0.5 text-[9px] text-ink-400">إجازة</div>)}
                       {past && !isOff && !hasTasks && !schedDay && (<div className="mt-0.5 text-[9px] text-ink-500/50">—</div>)}
                     </button>
                   );
@@ -262,6 +299,8 @@ export default function MySchedule() {
                     <button onClick={() => { if (selectedDay && !selectedDay.done) setShowBlockMsg(true); else setSelectedDayIdx((i) => Math.min(totalDays - 1, i + 1)); }} disabled={selectedDayIdx >= totalDays - 1} className="flex items-center gap-1 text-xs font-bold text-gold-300 transition-colors hover:text-gold-200 disabled:opacity-30">التالي<ChevronLeft className="h-4 w-4" /></button>
                   </div>
                 </>
+              ) : selectedDay && selectedDay.isRestDay ? (
+                <div className="py-8 text-center"><div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-full bg-sky-400/10 border border-sky-400/30"><Coffee className="h-7 w-7 text-sky-400" /></div><p className="mb-1 font-display text-base font-bold text-sky-300">يوم راحة</p><p className="text-sm text-ink-300">هذا يوم إجازة من تأجيل مهامك — استمتع بوقتك!</p></div>
               ) : (
                 <div className="py-8 text-center"><Coffee className="mx-auto mb-2 h-8 w-8 text-ink-500" /><p className="text-sm text-ink-300">لا توجد مهام في هذا اليوم</p></div>
               )}
@@ -296,6 +335,54 @@ export default function MySchedule() {
           title="حذف الجدول"
           message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء."
         />
+
+        {/* Rejoin gate for users who left the Telegram group */}
+        <TelegramGate
+          open={rejoinGateOpen}
+          mode="rejoin"
+          onVerified={() => { setRejoinGateOpen(false); setTelegramVerified(true); try { localStorage.setItem('tg_verified', 'true'); } catch { /* noop */ } }}
+          onClose={() => setRejoinGateOpen(false)}
+        />
+
+        {showPostpone && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowPostpone(false)}>
+            <div className="card mx-4 max-w-md animate-pop p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2"><div className="grid h-9 w-9 place-items-center rounded-lg bg-sky-400/10 border border-sky-400/30"><Plane className="h-5 w-5 text-sky-400" /></div><h3 className="font-display text-lg font-bold text-white">تأجيل المهام</h3></div>
+                <button onClick={() => setShowPostpone(false)} className="grid h-8 w-8 place-items-center rounded-lg text-ink-300 hover:text-white"><X className="h-5 w-5" /></button>
+              </div>
+
+              {!postponeDone ? (
+                <>
+                  <div className="mb-4 rounded-xl border border-sky-400/30 bg-sky-400/5 p-4">
+                    <p className="text-sm leading-relaxed text-sky-200">هذا الخيار للحالات الطارئة (كالسفر أو المرض) حيث تتأجل المهام الحالية إلى أيام لاحقة دون فقدانها.</p>
+                  </div>
+
+                  <p className="mb-3 text-sm font-bold text-ink-200">اختر مدة التأجيل:</p>
+                  <div className="mb-4 flex gap-2">
+                    {[1, 2, 3].map((d) => (
+                      <button key={d} onClick={() => setPostponeDays(d)} className={`flex-1 rounded-xl border py-3 text-center text-sm font-bold transition-all ${postponeDays === d ? 'border-sky-400/50 bg-sky-400/10 text-sky-400 shadow-glow-sky' : 'border-ink-600 bg-ink-800/50 text-ink-200 hover:border-ink-500'}`}>
+                        {d} {d === 1 ? 'يوم' : 'أيام'}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mb-4 rounded-xl border border-ink-700 bg-ink-800/40 p-4 text-center">
+                    <p className="text-xs text-ink-300">سيصبح جدولك من <span className="font-bold text-sky-300">{formatArabicDateShort(addDaysISO(todayISO(), postponeDays))}</span> إلى <span className="font-bold text-sky-300">{formatArabicDateShort(addDaysISO(schedule.endDate, postponeDays))}</span></p>
+                  </div>
+
+                  <button onClick={() => { postponeTasks(postponeDays); setPostponeDone(true); }} className="btn-sky w-full"><CalendarClock className="h-5 w-5" />تأجيل المهام</button>
+                </>
+              ) : (
+                <div className="text-center">
+                  <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-sky-400/10 border border-sky-400/30"><CheckCircle2 className="h-7 w-7 text-sky-400" /></div>
+                  <p className="mb-4 text-sm text-ink-200">أصبح جدولك من <span className="font-bold text-sky-300">{formatArabicDateShort(schedule.startDate)}</span> إلى <span className="font-bold text-sky-300">{formatArabicDateShort(schedule.endDate)}</span></p>
+                  <button onClick={() => setShowPostpone(false)} className="btn-gold w-full"><Check className="h-5 w-5" />حسناً</button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

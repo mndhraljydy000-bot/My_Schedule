@@ -12,7 +12,7 @@ const CATEGORY_META: Record<SourceCategory, { label: string; icon: typeof BookMa
 };
 
 export default function QiyasSection() {
-  const { selectedSources, toggleSource, isSourceSelected, removeSource, inputs, setInput, generateSchedule, setPage, schedule } = useApp();
+  const { selectedSources, toggleSource, isSourceSelected, removeSource, inputs, setInput, requestGenerate, generateSchedule, setPage, telegramVerified } = useApp();
   const [showInputs, setShowInputs] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<SourceCategory>>(new Set(['foundation']));
@@ -21,7 +21,16 @@ export default function QiyasSection() {
 
   const testTypeSources = selectedSources.filter((s) => s.testType === testType);
   const allReady = testTypeSources.length > 0 && testTypeSources.every((s) => { const inp = inputs[s.id]; return inp && (inp.videos > 0 || inp.tests > 0); });
-  const handleGenerate = () => { generateSchedule(testType); if (schedule?.error) { setGenError(schedule.error); return; } setPage('schedule'); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+  const handleGenerate = () => {
+    if (telegramVerified) {
+      const result = generateSchedule(testType);
+      if (!result.success) { setGenError(result.error ?? 'فشل إنشاء الجدول'); return; }
+      setPage('schedule');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      requestGenerate(testType);
+    }
+  };
 
   const foundationSources = getSourcesByCategory(testType, 'foundation');
   const quantSources = getSourcesByCategory(testType, 'training-quant');

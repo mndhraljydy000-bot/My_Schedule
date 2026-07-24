@@ -33,6 +33,7 @@ export interface ScheduleDay {
   tasks: ScheduleTask[];
   phase?: string;
   isReviewDay?: boolean;
+  isRestDay?: boolean;
   done: boolean;
 }
 

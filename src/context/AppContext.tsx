@@ -1,10 +1,12 @@
-import { createContext, useContext, useState, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import type {
   Page, TestType, Source, SourceInput, Schedule, ScheduleDay, ScheduleTask, ReviewMode,
 } from '../data/sources';
 import { TAHSILI_SUBJECTS } from '../data/sources';
 import type { TahsiliSubject } from '../data/sources';
 import { todayISO, addDaysISO, getDayOfWeek, daysBetween } from '../utils/scheduler';
+import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 
 export type { Page };
 
@@ -45,13 +47,16 @@ interface AppContextValue {
   setTahsiliSubjectOrder: (order: string[]) => void;
 
   schedule: Schedule | null;
-  generateSchedule: (testType: TestType) => void;
+  generateSchedule: (testType: TestType) => { success: boolean; error?: string };
+  requestGenerate: (testType: TestType) => void;
+  handleTelegramVerified: () => void;
   scheduleConfirmed: boolean;
   confirmSchedule: () => void;
   clearSchedule: () => void;
 
   toggleTaskDone: (dayIndex: number, taskId: string) => void;
   confirmDay: (dayIndex: number) => void;
+  postponeTasks: (days: number) => void;
 
   streak: number;
   progress: number;
@@ -61,13 +66,35 @@ interface AppContextValue {
 
   showDeleteWarning: boolean;
   setShowDeleteWarning: (v: boolean) => void;
+
+  cloudSyncing: boolean;
+
+  telegramVerified: boolean;
+  telegramGateOpen: boolean;
+  telegramGateMode: 'generate' | 'rejoin';
+  setTelegramGate: (open: boolean, mode?: 'generate' | 'rejoin') => void;
+  setTelegramVerified: (v: boolean) => void;
+  pendingGenerate: TestType | null;
+  setPendingGenerate: (t: TestType | null) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 const STORAGE_KEY = 'study-planner-state-v3';
 
-function loadState(): Partial<AppContextValue> {
+type PersistedState = {
+  page?: Page;
+  selectedSources?: Source[];
+  inputs?: Record<string, SourceInput>;
+  schedule?: Schedule | null;
+  scheduleConfirmed?: boolean;
+  streak?: number;
+  scheduleConfig?: ScheduleConfig;
+  reviewConfig?: ReviewConfig;
+  tahsiliSubjectOrder?: string[];
+};
+
+function loadLocalState(): PersistedState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return {};
@@ -75,8 +102,23 @@ function loadState(): Partial<AppContextValue> {
   } catch { return {}; }
 }
 
+const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
+  startDate: todayISO(),
+  endDate: addDaysISO(todayISO(), 30),
+  offDays: [5],
+};
+
+const DEFAULT_REVIEW_CONFIG: ReviewConfig = {
+  enabled: true,
+  mode: 'phase-end',
+  weeklyDays: [4],
+  intervalDays: 6,
+  phaseReviewDays: 2,
+};
+
 export function AppProvider({ children }: { children: ReactNode }) {
-  const saved = useMemo(loadState, []);
+  const { user } = useAuth();
+  const saved = useMemo(loadLocalState, []);
 
   const [page, setPage] = useState<Page>(saved.page ?? 'home');
   const [selectedSources, setSelectedSources] = useState<Source[]>(saved.selectedSources ?? []);
@@ -85,26 +127,74 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [scheduleConfirmed, setScheduleConfirmed] = useState<boolean>(saved.scheduleConfirmed ?? false);
   const [streak, setStreak] = useState<number>(saved.streak ?? 0);
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [telegramVerified, setTelegramVerified] = useState<boolean>(() => localStorage.getItem('tg_verified') === 'true');
+  const [telegramGateOpen, setTelegramGateOpen] = useState(false);
+  const [telegramGateMode, setTelegramGateMode] = useState<'generate' | 'rejoin'>('generate');
+  const [pendingGenerate, setPendingGenerate] = useState<TestType | null>(null);
 
-  const [scheduleConfig, setScheduleConfigState] = useState<ScheduleConfig>(saved.scheduleConfig ?? {
-    startDate: todayISO(),
-    endDate: addDaysISO(todayISO(), 30),
-    offDays: [5],
-  });
+  const setTelegramGate = (open: boolean, mode: 'generate' | 'rejoin' = 'generate') => {
+    setTelegramGateOpen(open);
+    setTelegramGateMode(mode);
+  };
 
-  const [reviewConfig, setReviewConfigState] = useState<ReviewConfig>(saved.reviewConfig ?? {
-    enabled: true,
-    mode: 'phase-end',
-    weeklyDays: [4],
-    intervalDays: 6,
-    phaseReviewDays: 2,
-  });
-  const [tahsiliSubjectOrder, setTahsiliSubjectOrderState] = useState<string[]>(saved.tahsiliSubjectOrder ?? []);
+  const [scheduleConfig, setScheduleConfigState] = useState<ScheduleConfig>(
+    saved.scheduleConfig ?? DEFAULT_SCHEDULE_CONFIG
+  );
 
+  const [reviewConfig, setReviewConfigState] = useState<ReviewConfig>(
+    saved.reviewConfig ?? DEFAULT_REVIEW_CONFIG
+  );
+  const [tahsiliSubjectOrder, setTahsiliSubjectOrderState] = useState<string[]>(
+    saved.tahsiliSubjectOrder ?? []
+  );
+
+  // On login: load cloud state and replace local
   useEffect(() => {
-    const data = { page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder };
+    if (!user) return;
+    (async () => {
+      setCloudSyncing(true);
+      const { data, error } = await supabase
+        .from('user_schedules')
+        .select('schedule_data')
+        .maybeSingle();
+      setCloudSyncing(false);
+      if (error || !data) return;
+      const s = data.schedule_data as PersistedState;
+      if (s.selectedSources !== undefined) setSelectedSources(s.selectedSources);
+      if (s.inputs !== undefined) setInputs(s.inputs);
+      if (s.schedule !== undefined) setSchedule(s.schedule);
+      if (s.scheduleConfirmed !== undefined) setScheduleConfirmed(s.scheduleConfirmed);
+      if (s.streak !== undefined) setStreak(s.streak);
+      if (s.scheduleConfig !== undefined) setScheduleConfigState(s.scheduleConfig);
+      if (s.reviewConfig !== undefined) setReviewConfigState(s.reviewConfig);
+      if (s.tahsiliSubjectOrder !== undefined) setTahsiliSubjectOrderState(s.tahsiliSubjectOrder);
+    })();
+  }, [user]);
+
+  const getStateSnapshot = useCallback((): PersistedState => ({
+    page, selectedSources, inputs, schedule, scheduleConfirmed, streak,
+    scheduleConfig, reviewConfig, tahsiliSubjectOrder,
+  }), [page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder]);
+
+  // Sync to localStorage always
+  useEffect(() => {
+    const data = getStateSnapshot();
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* noop */ }
-  }, [page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder]);
+  }, [getStateSnapshot]);
+
+  // Sync to Supabase when user is signed in (debounced)
+  useEffect(() => {
+    if (!user) return;
+    const timer = setTimeout(async () => {
+      const data = getStateSnapshot();
+      await supabase.from('user_schedules').upsert(
+        { user_id: user.id, schedule_data: data, updated_at: new Date().toISOString() },
+        { onConflict: 'user_id' }
+      );
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [user, getStateSnapshot]);
 
   useEffect(() => {
     if (!scheduleConfirmed || !schedule) return;
@@ -162,29 +252,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const setReviewConfig = (r: Partial<ReviewConfig>) => setReviewConfigState((p) => ({ ...p, ...r }));
   const setTahsiliSubjectOrder = (order: string[]) => setTahsiliSubjectOrderState(order);
 
-  const generateSchedule = (testType: TestType) => {
+  const handleTelegramVerified = () => {
+    setTelegramVerified(true);
+    setTelegramGateOpen(false);
+    try { localStorage.setItem('tg_verified', 'true'); } catch { /* noop */ }
+    if (pendingGenerate) {
+      const result = generateSchedule(pendingGenerate);
+      setPendingGenerate(null);
+      if (result.success) {
+        setPage('schedule');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  };
+
+  const requestGenerate = (testType: TestType) => {
+    if (telegramVerified) {
+      const result = generateSchedule(testType);
+      if (result.success) {
+        setPage('schedule');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+    setPendingGenerate(testType);
+    setTelegramGate(true, 'generate');
+  };
+
+  const generateSchedule = (testType: TestType): { success: boolean; error?: string } => {
     const tSources = selectedSources.filter((s) => s.testType === testType);
     if (tSources.length === 0) {
-      setSchedule({ testType, startDate: scheduleConfig.startDate, endDate: scheduleConfig.endDate, days: [], totalVideos: 0, totalTests: 0, error: 'لم تختر أي مصادر بعد' });
-      return;
+      return { success: false, error: 'لم تختر أي مصادر بعد' };
     }
 
     for (const s of tSources) {
       const inp = inputs[s.id];
       if (!inp || (inp.videos <= 0 && inp.tests <= 0)) {
-        setSchedule({ testType, startDate: scheduleConfig.startDate, endDate: scheduleConfig.endDate, days: [], totalVideos: 0, totalTests: 0, error: `أدخل عدداً للفيديوهات أو الاختبارات لـ "${s.name}"` });
-        return;
+        return { success: false, error: `أدخل عدداً للفيديوهات أو الاختبارات لـ "${s.name}"` };
       }
     }
 
-    const { startDate, endDate, offDays } = scheduleConfig;
+    let { startDate, endDate, offDays } = scheduleConfig;
     if (!startDate || !endDate || new Date(endDate) < new Date(startDate)) {
-      setSchedule({ testType, startDate, endDate, days: [], totalVideos: 0, totalTests: 0, error: 'تحقق من تواريخ البداية والنهاية' });
-      return;
+      return { success: false, error: 'تحقق من تواريخ البداية والنهاية' };
     }
+    // Auto-correct stale start date to today
     if (startDate < todayISO()) {
-      setSchedule({ testType, startDate, endDate, days: [], totalVideos: 0, totalTests: 0, error: 'لا يمكن اختيار تاريخ بداية سابق. اختر تاريخ اليوم أو أي تاريخ مستقبلي' });
-      return;
+      startDate = todayISO();
+      setScheduleConfig((prev) => ({ ...prev, startDate }));
+      if (endDate < startDate) {
+        return { success: false, error: 'تاريخ النهاية أصبح سابقاً لتاريخ اليوم. اختر تاريخ نهاية مستقبلي.' };
+      }
     }
 
     const taskPools: { sourceId: string; sourceName: string; tasks: { type: 'video' | 'test'; label: string }[] }[] = [];
@@ -208,40 +326,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     if (studyDates.length === 0) {
-      setSchedule({ testType, startDate, endDate, days: [], totalVideos, totalTests, error: 'لا توجد أيام دراسة متاحة (كلها إجازة؟)' });
-      return;
+      return { success: false, error: 'لا توجد أيام دراسة متاحة (كلها إجازة؟)' };
     }
 
-    // Build flat interleaved task list
     type FlatTask = { sourceId: string; type: 'video' | 'test'; label: string; phase: string };
     const flatTasks: FlatTask[] = [];
 
     if (testType === 'qiyas') {
-      // Qiyas: interleave videos and tests evenly within each phase,
-      // merge quant + verbal training together
       const foundationSources = tSources.filter(s => s.groupId === 'foundation');
       const trainingSources = tSources.filter(s => s.groupId === 'training-quant' || s.groupId === 'training-verbal');
 
-      // Interleave videos and tests for a single source evenly
       const interleaveSource = (s: typeof tSources[0], phaseLabel: string): FlatTask[] => {
         const inp = inputs[s.id];
+        const prefix = phaseLabel.replace(/^ال/, '');
         const result: FlatTask[] = [];
         const max = Math.max(inp.videos, inp.tests);
         let vIdx = 1, tIdx = 1;
         for (let i = 0; i < max; i++) {
           if (vIdx <= inp.videos) {
-            result.push({ sourceId: s.id, type: 'video', label: `${s.name} - فيديو ${vIdx}`, phase: phaseLabel });
+            result.push({ sourceId: s.id, type: 'video', label: `فيديو ${prefix} ${s.name} ${vIdx}`, phase: phaseLabel });
             vIdx++;
           }
           if (tIdx <= inp.tests) {
-            result.push({ sourceId: s.id, type: 'test', label: `${s.name} - اختبار ${tIdx}`, phase: phaseLabel });
+            result.push({ sourceId: s.id, type: 'test', label: `اختبار ${prefix} ${s.name} ${tIdx}`, phase: phaseLabel });
             tIdx++;
           }
         }
         return result;
       };
 
-      // Round-robin across multiple sources within a phase
       const roundRobin = (sourceTaskLists: FlatTask[][]): FlatTask[] => {
         const result: FlatTask[] = [];
         let added = true;
@@ -254,12 +367,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return result;
       };
 
-      // Foundation phase first, then training phase (quant + verbal merged)
       const foundationTasks = roundRobin(foundationSources.map(s => interleaveSource(s, 'التأسيس')));
       const trainingTasks = roundRobin(trainingSources.map(s => interleaveSource(s, 'التدريب')));
       flatTasks.push(...foundationTasks, ...trainingTasks);
     } else {
-      // Tahsili: sort sources by user-defined subject order, then sequential (videos then tests per source)
       const orderedSources = [...tSources].sort((a, b) => {
         const aIdx = tahsiliSubjectOrder.indexOf(a.id);
         const bIdx = tahsiliSubjectOrder.indexOf(b.id);
@@ -336,6 +447,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const endDateActual = days.length > 0 ? days[days.length - 1].date : endDate;
     setSchedule({ testType, startDate, endDate: endDateActual, days, totalVideos, totalTests });
     setScheduleConfirmed(false);
+    return { success: true };
   };
 
   const confirmSchedule = () => setScheduleConfirmed(true);
@@ -377,6 +489,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const postponeTasks = (numDays: number) => {
+    setSchedule((prev) => {
+      if (!prev) return prev;
+      const today = todayISO();
+      const todayIdx = prev.days.findIndex((d) => d.date >= today && !d.done);
+      if (todayIdx === -1) return prev;
+      const currentDate = prev.days[todayIdx].date;
+      const beforeToday = prev.days.slice(0, todayIdx);
+      const afterToday = prev.days.slice(todayIdx);
+      const shiftedDays = afterToday.map((d) => ({ ...d, date: addDaysISO(d.date, numDays) }));
+      const postponedDays: ScheduleDay[] = [];
+      for (let i = 0; i < numDays; i++) {
+        postponedDays.push({ dayIndex: 0, date: addDaysISO(currentDate, i), tasks: [], phase: 'إجازة', isReviewDay: false, isRestDay: true, done: false });
+      }
+      const allDays = [...beforeToday, ...postponedDays, ...shiftedDays];
+      const reindexed = allDays.map((d, i) => ({ ...d, dayIndex: i }));
+      const newEndDate = reindexed.length > 0 ? reindexed[reindexed.length - 1].date : prev.endDate;
+      const newStartDate = beforeToday.length === 0 ? addDaysISO(currentDate, numDays) : prev.startDate;
+      return { ...prev, days: reindexed, startDate: newStartDate, endDate: newEndDate };
+    });
+  };
+
   const totalTasks = useMemo(() => schedule?.days.reduce((a, d) => a + d.tasks.length, 0) ?? 0, [schedule]);
   const completedTasks = useMemo(() => schedule?.days.reduce((a, d) => a + d.tasks.filter((t) => t.done).length, 0) ?? 0, [schedule]);
   const completedDays = useMemo(() => schedule?.days.filter((d) => d.done).length ?? 0, [schedule]);
@@ -385,7 +519,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return Math.round((completedDays / schedule.days.length) * 100);
   }, [schedule, completedDays]);
 
-  const value: AppState = {
+  const value: AppContextValue = {
     page, setPage,
     selectedSources, toggleSource, addSource, removeSource, isSourceSelected,
     inputs, setInput,
@@ -393,10 +527,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     reviewConfig, setReviewConfig,
     tahsiliSubjectOrder, setTahsiliSubjectOrder,
     schedule, generateSchedule, scheduleConfirmed, confirmSchedule, clearSchedule,
-    toggleTaskDone, confirmDay,
+    toggleTaskDone, confirmDay, postponeTasks,
     streak, progress, completedDays, totalTasks, completedTasks,
     showDeleteWarning, setShowDeleteWarning,
-    navigateToSection, showScheduleExists, setShowScheduleExists, pendingPage,
+    cloudSyncing,
+    telegramVerified, telegramGateOpen, telegramGateMode, setTelegramGate,
+    setTelegramVerified, pendingGenerate, setPendingGenerate,
+    requestGenerate, handleTelegramVerified,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

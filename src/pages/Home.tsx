@@ -1,10 +1,27 @@
 import { useApp } from '../context/AppContext';
 import { formatArabicDate } from '../utils/scheduler';
 import DeleteConfirmDialog from '../components/DeleteConfirmDialog';
+import Toast from '../components/Toast';
+import SectionPicker from '../components/SectionPicker';
+import { useState } from 'react';
 import { Brain, GraduationCap, CalendarDays, ArrowLeft, Sparkles, Target, Layers, Flame, Trash2, TrendingUp, PlayCircle, FileText } from 'lucide-react';
 
 export default function Home() {
-  const { setPage, navigateToSection, selectedSources, schedule, scheduleConfirmed, clearSchedule, streak, progress, completedDays, showDeleteWarning, setShowDeleteWarning } = useApp();
+  const { setPage, selectedSources, schedule, scheduleConfirmed, clearSchedule, streak, progress, completedDays, showDeleteWarning, setShowDeleteWarning } = useApp();
+  const [showBlockToast, setShowBlockToast] = useState(false);
+  const [showPicker, setShowPicker] = useState(false);
+  const blockMessage = 'لديك جدول حالي — لا يمكن إنشاء جدول جديد. احذف الجدول الحالي أولاً من زر الحذف في بطاقة جدولك.';
+
+  const handleStart = () => {
+    if (scheduleConfirmed) { setShowBlockToast(true); return; }
+    setShowPicker(true);
+  };
+
+  const handlePick = (section: 'qiyas' | 'tahsili') => {
+    setShowPicker(false);
+    setPage(section);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const features = [
     { icon: Layers, title: 'خطة تتابعية ذكية', desc: 'التأسيس أولاً ثم التدريب — أو مادة واحدة في اليوم للتحصيلي.', color: 'text-gold-300', bg: 'from-gold-300/10 to-gold-500/5' },
@@ -29,8 +46,7 @@ export default function Home() {
           <h1 className="section-title text-4xl leading-tight text-white sm:text-6xl">نظّم جدول مذاكرتك<br /><span className="bg-gradient-to-l from-gold-200 via-gold-400 to-gold-300 bg-clip-text text-transparent">للقدرات والتحصيلي</span><br />بأسلوب احترافي</h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-ink-200 sm:text-lg">منصة متطورة تبني لك خطة مذاكرة تتابعية متكاملة، مع توزيع ذكي على تقويم فعلي، مهام مفصلة لكل فيديو واختبار، أيام مراجعة ذكية، وشعلة استمرارية تحفزك.</p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <button onClick={() => navigateToSection('qiyas')} className="btn-gold w-full sm:w-auto"><Brain className="h-5 w-5" />ابدأ بتنظيم القدرات</button>
-            <button onClick={() => navigateToSection('tahsili')} className="btn-sky w-full sm:w-auto"><GraduationCap className="h-5 w-5" />ابدأ بتنظيم التحصيلي</button>
+            <button onClick={handleStart} className="btn-gold w-full sm:w-auto"><Sparkles className="h-5 w-5" />ابدأ التنظيم الآن</button>
           </div>
         </div>
       </section>
@@ -89,16 +105,9 @@ export default function Home() {
           </div>
         </div>
       </section>
-      <section className="px-4 py-12 sm:px-6">
-        <div className="mx-auto max-w-4xl">
-          <div className="card relative overflow-hidden p-8 text-center sm:p-12">
-            <div className="pointer-events-none absolute inset-0 -z-10"><div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-gold-500/10 blur-3xl" /><div className="absolute bottom-0 right-0 h-40 w-40 rounded-full bg-sky-500/10 blur-3xl" /></div>
-            <h2 className="section-title text-2xl text-white sm:text-3xl">جاهز لتنظيم مذاكرتك؟</h2>
-            <p className="mx-auto mt-3 max-w-md text-sm text-ink-300">ابدأ الآن وولّد جدولك الذكي في أقل من دقيقة</p>
-            <button onClick={() => navigateToSection('qiyas')} className="btn-gold mt-6"><Sparkles className="h-5 w-5" />ابدأ الآن مجاناً</button>
-          </div>
-        </div>
-      </section>
+
+      <Toast open={showBlockToast} onClose={() => setShowBlockToast(false)} message={blockMessage} />
+      <SectionPicker open={showPicker} onClose={() => setShowPicker(false)} onPick={handlePick} />
 
       <DeleteConfirmDialog
         open={showDeleteWarning}
