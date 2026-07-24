@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { useApp } from '../context/AppContext';
-import { CalendarDays, Clock, Coffee, RefreshCw, Calendar, Layers, Hash, AlertCircle, X, ArrowUp, ArrowDown, ListOrdered } from 'lucide-react';
-import { ARABIC_DAYS_SHORT, TAHSILI_SUBJECTS } from '../data/sources';
+import { CalendarDays, Clock, Coffee, RefreshCw, Calendar, Layers, Hash, AlertCircle, X } from 'lucide-react';
+import { ARABIC_DAYS_SHORT } from '../data/sources';
 import type { ReviewMode } from '../data/sources';
 import { todayISO } from '../utils/scheduler';
 
@@ -15,8 +15,8 @@ const REVIEW_MODES: { mode: ReviewMode; label: string; icon: typeof RefreshCw; d
   { mode: 'phase-end', label: 'مراجعة مرحلية تلقائية', icon: Layers, desc: 'مراجعة تلقائية بعد انتهاء كل مرحلة/مادة' },
 ];
 
-export default function ScheduleConfigForm({ showSubjectOrder = false }: { showSubjectOrder?: boolean }) {
-  const { scheduleConfig, setScheduleConfig, reviewConfig, setReviewConfig, selectedSources, tahsiliSubjectOrder, setTahsiliSubjectOrder } = useApp();
+export default function ScheduleConfigForm() {
+  const { scheduleConfig, setScheduleConfig, reviewConfig, setReviewConfig } = useApp();
   const [alertMsg, setAlertMsg] = useState<string | null>(null);
   const alertTimer = useRef<number | undefined>(undefined);
 
@@ -40,18 +40,6 @@ export default function ScheduleConfigForm({ showSubjectOrder = false }: { showS
       }
       setScheduleConfig({ offDays: [...scheduleConfig.offDays, dow].sort() });
     }
-  };
-
-  const tahsiliSubjects = selectedSources.filter((s) => s.testType === 'tahsili');
-  const orderedSubjects = tahsiliSubjectOrder.length > 0
-    ? tahsiliSubjectOrder.map(id => tahsiliSubjects.find(s => s.id === id)).filter(Boolean)
-    : tahsiliSubjects;
-  const moveSubject = (index: number, dir: -1 | 1) => {
-    const newIndex = index + dir;
-    if (newIndex < 0 || newIndex >= orderedSubjects.length) return;
-    const ids = orderedSubjects.map(s => s.id);
-    [ids[index], ids[newIndex]] = [ids[newIndex], ids[index]];
-    setTahsiliSubjectOrder(ids);
   };
 
   const toggleWeeklyReviewDay = (dow: number) => {
@@ -101,30 +89,6 @@ export default function ScheduleConfigForm({ showSubjectOrder = false }: { showS
           <p className="mt-2 text-[11px] text-ink-400">{scheduleConfig.offDays.length > 0 ? `الأيام المختارة كإجازة: ${scheduleConfig.offDays.map((d) => ARABIC_DAYS_SHORT[d]).join('، ')}` : 'لا توجد أيام إجازة — ستذاكر كل أيام الأسبوع'}</p>
         </div>
       </div>
-
-      {showSubjectOrder && orderedSubjects.length > 0 && (
-        <div className="card animate-fade-up p-5 sm:p-6">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-gradient-to-br from-sky-400/10 to-sky-600/5 border border-sky-400/30"><ListOrdered className="h-5 w-5 text-sky-400" /></div>
-            <h3 className="font-display text-lg font-bold text-white">ترتيب المواد</h3>
-          </div>
-          <p className="mb-3 text-xs text-ink-300">رتب المواد حسب تفضيلك — الجدول سيبدأ بالمادة الأولى</p>
-          <div className="space-y-2">
-            {orderedSubjects.map((s, i) => (
-              <div key={s.id} className="flex items-center justify-between rounded-xl border border-ink-700 bg-ink-800/40 p-3">
-                <div className="flex items-center gap-3">
-                  <span className="grid h-7 w-7 place-items-center rounded-lg bg-sky-400/15 font-display text-sm font-bold text-sky-300">{i + 1}</span>
-                  <span className="text-sm font-bold text-white">{s.name}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => moveSubject(i, -1)} disabled={i === 0} className="grid h-8 w-8 place-items-center rounded-lg border border-ink-600 bg-ink-800/50 text-ink-200 transition-all hover:border-sky-400/40 hover:text-sky-300 disabled:opacity-30"><ArrowUp className="h-4 w-4" /></button>
-                  <button onClick={() => moveSubject(i, 1)} disabled={i === orderedSubjects.length - 1} className="grid h-8 w-8 place-items-center rounded-lg border border-ink-600 bg-ink-800/50 text-ink-200 transition-all hover:border-sky-400/40 hover:text-sky-300 disabled:opacity-30"><ArrowDown className="h-4 w-4" /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       <div className="card animate-fade-up p-5 sm:p-6">
         <div className="mb-4 flex items-center gap-2">
