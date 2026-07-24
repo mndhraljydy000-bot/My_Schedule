@@ -73,7 +73,7 @@ export default function TahsiliSection() {
         ) : (
           <div className="animate-fade-in space-y-4">
             <div className="flex items-center justify-between"><button onClick={() => setShowInputs(false)} className="btn-ghost"><ChevronLeft className="h-4 w-4" />رجوع للاختيار</button><h2 className="font-display text-xl font-bold text-white">أدخل بياناتك</h2></div>
-            <ScheduleConfigForm />
+            <ScheduleConfigForm showSubjectOrder />
             {testTypeSources.map((s, i) => { const inp = inputs[s.id] || { videos: 0, tests: 0 }; return (
               <div key={s.id} className="card animate-fade-up p-5 sm:p-6" style={{ animationDelay: `${i * 80}ms` }}>
                 <div className="mb-4 flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-sky-400/15 font-display text-sm font-bold text-sky-300">{i + 1}</span><h3 className="font-display text-lg font-bold text-white">{s.name}</h3></div>
