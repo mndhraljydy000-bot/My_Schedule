@@ -270,8 +270,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       const orderedPools = orderedSources.map(s => taskPools.find(p => p.sourceId === s.id)!).filter(Boolean);
       for (const pool of orderedPools) {
-        for (const t of pool.tasks) {
-          flatTasks.push({ sourceId: pool.sourceId, type: t.type, label: t.label, phase: pool.sourceName });
+        const s = orderedSources.find(src => src.id === pool.sourceId)!;
+        const inp = inputs[s.id];
+        const max = Math.max(inp.videos, inp.tests);
+        let vIdx = 1, tIdx = 1;
+        for (let i = 0; i < max; i++) {
+          if (vIdx <= inp.videos) {
+            flatTasks.push({ sourceId: s.id, type: 'video', label: `${s.name} - فيديو ${vIdx}`, phase: pool.sourceName });
+            vIdx++;
+          }
+          if (tIdx <= inp.tests) {
+            flatTasks.push({ sourceId: s.id, type: 'test', label: `${s.name} - اختبار ${tIdx}`, phase: pool.sourceName });
+            tIdx++;
+          }
         }
       }
     }

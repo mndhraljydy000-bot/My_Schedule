@@ -9,7 +9,7 @@ export default function Home() {
   const features = [
     { icon: Layers, title: 'خطة تتابعية ذكية', desc: 'التأسيس أولاً ثم التدريب — أو مادة واحدة في اليوم للتحصيلي.', color: 'text-gold-300', bg: 'from-gold-300/10 to-gold-500/5' },
     { icon: CalendarDays, title: 'جدول بتقويم حقيقي', desc: 'حدد تواريخك وأيام إجازتك، ووزّع جدولك على التقويم الفعلي.', color: 'text-sky-400', bg: 'from-sky-400/10 to-sky-600/5' },
-    { icon: Flame, title: 'شعلة الاستمرارية', desc: 'حافظ على شعلتك كل يوم تلتزم فيه تزيد الشعلة.', color: 'text-flame-500', bg: 'from-flame-500/10 to-flame-600/5' },
+    { icon: Flame, title: 'شعلة الاستمرارية', desc: 'حافظ على شعلتك 🔥 كل يوم تلتزم فيه تزيد الشعلة.', color: 'text-flame-500', bg: 'from-flame-500/10 to-flame-600/5' },
     { icon: Target, title: 'مهام مفصلة ودقيقة', desc: 'كل فيديو واختبار له مربع مستقل — تتبع دقيق لكل خطوة.', color: 'text-emerald-400', bg: 'from-emerald-400/10 to-emerald-500/5' },
   ];
 
@@ -25,7 +25,7 @@ export default function Home() {
       <section className="relative overflow-hidden px-4 pt-16 pb-20 sm:px-6 sm:pt-24">
         <div className="pointer-events-none absolute inset-0 -z-10"><div className="absolute right-1/4 top-0 h-72 w-72 rounded-full bg-gold-500/10 blur-3xl" /><div className="absolute left-1/4 top-20 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl" /></div>
         <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-5 inline-flex animate-pop items-center gap-2 rounded-full border border-gold-400/30 bg-gold-400/10 px-4 py-1.5 text-xs font-bold text-gold-200"><Sparkles className="h-3.5 w-3.5" />مساعد طالب الثانوي الذكي</div>
+          <div className="mb-5 inline-flex animate-pop items-center gap-2 rounded-full border border-gold-400/30 bg-gold-400/10 px-4 py-1.5 text-xs font-bold text-gold-200"><Sparkles className="h-3.5 w-3.5" />مساعد طالب الثانوية الذكي</div>
           <h1 className="section-title text-4xl leading-tight text-white sm:text-6xl">نظّم جدول مذاكرتك<br /><span className="bg-gradient-to-l from-gold-200 via-gold-400 to-gold-300 bg-clip-text text-transparent">للقدرات والتحصيلي</span><br />بأسلوب احترافي</h1>
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-ink-200 sm:text-lg">منصة متطورة تبني لك خطة مذاكرة تتابعية متكاملة، مع توزيع ذكي على تقويم فعلي، مهام مفصلة لكل فيديو واختبار، أيام مراجعة ذكية، وشعلة استمرارية تحفزك.</p>
           <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
@@ -100,13 +100,7 @@ export default function Home() {
         </div>
       </section>
 
-      <DeleteConfirmDialog
-        open={showDeleteWarning}
-        onClose={() => setShowDeleteWarning(false)}
-        onConfirm={() => { clearSchedule(); setShowDeleteWarning(false); setPage('home'); }}
-        title="حذف الجدول"
-        message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء."
-      />
+      <DeleteConfirmDialog open={showDeleteWarning} onClose={() => setShowDeleteWarning(false)} onConfirm={() => clearSchedule()} title="حذف الجدول" message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء." />
     </div>
   );
 }
