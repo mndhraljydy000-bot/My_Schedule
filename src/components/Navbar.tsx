@@ -1,6 +1,7 @@
 import { useApp, type Page } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import Toast from './Toast';
+import { getStreakTier } from '../utils/streak';
 import { Home, Brain, GraduationCap, CalendarDays, Menu, X, Flame, LogOut, Cloud, NotebookPen } from 'lucide-react';
 import { useState } from 'react';
 
@@ -54,7 +55,7 @@ export default function Navbar() {
               {active && <span className="absolute -bottom-px left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-gold-400" />}
             </button>);})}
 
-          {streak > 0 && (<div className="mr-1 flex items-center gap-1 rounded-full border border-flame-500/30 bg-flame-500/10 px-3 py-1.5 text-xs font-bold text-flame-400"><Flame className="h-4 w-4 animate-flame-flicker" /><span>{streak}</span></div>)}
+          {streak > 0 && (() => { const t = getStreakTier(streak); return (<div title={`${t.label} — ${streak} أيام`} className={`mr-1 flex items-center gap-1 rounded-full border ${t.border} ${t.bg} ${t.glow} px-3 py-1.5 text-xs font-bold ${t.text}`}><Flame className="h-4 w-4 animate-flame-flicker" /><span>{streak}</span></div>); })()}
 
           {/* User menu */}
           <div className="mr-2 flex items-center gap-2 border-r border-ink-700/50 pr-3">
@@ -83,7 +84,7 @@ export default function Navbar() {
                 {item.id === 'schedule' && schedule && scheduleConfirmed && <span className="grid h-5 min-w-5 place-items-center rounded-full bg-sky-500 px-1 text-[10px] font-bold text-white">{schedule.days.length}</span>}
               </button>);})}
           </div>
-          {streak > 0 && (<div className="mt-2 flex items-center justify-center gap-1.5 rounded-full border border-flame-500/30 bg-flame-500/10 px-3 py-1.5 text-xs font-bold text-flame-400"><Flame className="h-4 w-4 animate-flame-flicker" /><span>شعلة الاستمرارية: {streak} أيام</span></div>)}
+          {streak > 0 && (() => { const t = getStreakTier(streak); return (<div className={`mt-2 flex items-center justify-center gap-1.5 rounded-full border ${t.border} ${t.bg} ${t.glow} px-3 py-1.5 text-xs font-bold ${t.text}`}><Flame className="h-4 w-4 animate-flame-flicker" /><span>شعلة الاستمرارية: {streak} أيام — {t.label}</span></div>); })()}
           <div className="mt-3 flex items-center justify-between border-t border-ink-700/40 pt-3">
             <span className="truncate text-xs text-ink-300">{user?.email}</span>
             <button onClick={handleSignOut} disabled={signingOut} className="flex items-center gap-1.5 rounded-lg border border-ink-600 bg-ink-800/60 px-3 py-1.5 text-xs font-bold text-red-400 transition-all hover:bg-red-500/10 disabled:opacity-50">

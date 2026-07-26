@@ -5,6 +5,7 @@ import Toast from '../components/Toast';
 import SectionPicker from '../components/SectionPicker';
 import { useState } from 'react';
 import { Brain, GraduationCap, CalendarDays, ArrowLeft, Sparkles, Target, Layers, Flame, Trash2, TrendingUp, PlayCircle, FileText } from 'lucide-react';
+import { getStreakTier } from '../utils/streak';
 
 export default function Home() {
   const { setPage, selectedSources, schedule, scheduleConfirmed, clearSchedule, streak, progress, completedDays, showDeleteWarning, setShowDeleteWarning } = useApp();
@@ -59,7 +60,7 @@ export default function Home() {
               <div className="mb-5 flex items-center justify-between">
                 <div className="flex items-center gap-2"><CalendarDays className="h-6 w-6 text-gold-300" /><h2 className="font-display text-xl font-bold text-white">جدولك الحالي</h2></div>
                 <div className="flex items-center gap-2">
-                  {streak > 0 && (<div className="flex items-center gap-1.5 rounded-full border border-flame-500/30 bg-flame-500/10 px-3 py-1.5 text-xs font-bold text-flame-400"><Flame className="h-4 w-4 animate-flame-flicker" />{streak} أيام</div>)}
+                  {streak > 0 && (() => { const t = getStreakTier(streak); return (<div title={`${t.label} — ${streak} أيام`} className={`flex items-center gap-1.5 rounded-full border ${t.border} ${t.bg} ${t.glow} px-3 py-1.5 text-xs font-bold ${t.text}`}><Flame className="h-4 w-4 animate-flame-flicker" />{streak} أيام — {t.label}</div>); })()}
                   <button onClick={() => setShowDeleteWarning(true)} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/30 bg-red-500/10 text-red-400 transition-all hover:bg-red-500/20" title="حذف الجدول"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
