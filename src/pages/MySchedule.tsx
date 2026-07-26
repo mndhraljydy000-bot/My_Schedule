@@ -62,8 +62,7 @@ export default function MySchedule() {
     let cancelled = false;
     (async () => {
       try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-        const res = await fetch(`${supabaseUrl}/functions/v1/telegram-verify`, {
+        const res = await fetch(`https://dfxjrhsfkiphofotlkti.supabase.co/functions/v1/telegram-verify`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'check', telegramUserId: Number(stored) }),

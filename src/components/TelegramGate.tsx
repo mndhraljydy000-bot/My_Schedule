@@ -9,7 +9,7 @@ interface TelegramGateProps {
 }
 
 const GROUP_LINK = 'https://t.me/gadrat_990';
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_URL = 'https://dfxjrhsfkiphofotlkti.supabase.co';
 
 export default function TelegramGate({ open, mode, onVerified, onClose }: TelegramGateProps) {
   const [sessionCode, setSessionCode] = useState<string | null>(null);
