@@ -10,6 +10,7 @@ import Notes from './pages/Notes';
 import AuthPage from './pages/AuthPage';
 import TelegramGate from './components/TelegramGate';
 import Toast from './components/Toast';
+import InstallPrompt from './components/InstallPrompt';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
@@ -32,6 +33,7 @@ function AppContent() {
         onClose={() => setTelegramGate(false)}
       />
       <Toast open={!!generateError} onClose={() => setGenerateError(null)} message={generateError ?? ''} />
+      <InstallPrompt />
     </div>
   );
 }
