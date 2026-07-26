@@ -4,6 +4,7 @@ import { TAHSILI_SOURCES, TAHSILI_SUBJECTS } from '../data/sources';
 import type { TahsiliSubject } from '../data/sources';
 import ScheduleConfigForm from '../components/ScheduleConfigForm';
 import { BookMarked, Check, Plus, X, Sparkles, ChevronLeft, Layers, ArrowLeft, PlayCircle, FileText, ChevronDown, Sigma, Atom, FlaskConical, Leaf, AlertCircle } from 'lucide-react';
+import { MAX_PER_SOURCE } from '../context/AppContext';
 
 const SUBJECT_ICONS: Record<TahsiliSubject, typeof Sigma> = { math: Sigma, physics: Atom, chemistry: FlaskConical, biology: Leaf };
 const SUBJECT_COLORS: Record<TahsiliSubject, string> = { math: 'text-sky-400', physics: 'text-gold-300', chemistry: 'text-sky-400', biology: 'text-gold-300' };
@@ -87,8 +88,8 @@ export default function TahsiliSection() {
               <div key={s.id} className="card animate-fade-up p-5 sm:p-6" style={{ animationDelay: `${i * 80}ms` }}>
                 <div className="mb-4 flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-sky-400/15 font-display text-sm font-bold text-sky-300">{i + 1}</span><h3 className="font-display text-lg font-bold text-white">{s.name}</h3></div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><PlayCircle className="h-3.5 w-3.5 text-sky-400" />عدد فيديوهات الشرح</label><input type="number" min={0} value={inp.videos || ''} onChange={(e) => setInput(s.id, { videos: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 50" className="input-field" /></div>
-                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><FileText className="h-3.5 w-3.5 text-gold-300" />عدد الاختبارات</label><input type="number" min={0} value={inp.tests || ''} onChange={(e) => setInput(s.id, { tests: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 20" className="input-field" /></div>
+                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><PlayCircle className="h-3.5 w-3.5 text-sky-400" />عدد فيديوهات الشرح</label><input type="number" min={0} max={MAX_PER_SOURCE} value={inp.videos || ''} onChange={(e) => setInput(s.id, { videos: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 50" className="input-field" /><p className="mt-1 text-[10px] text-ink-400">الحد الأقصى {MAX_PER_SOURCE}</p></div>
+                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><FileText className="h-3.5 w-3.5 text-gold-300" />عدد الاختبارات</label><input type="number" min={0} max={MAX_PER_SOURCE} value={inp.tests || ''} onChange={(e) => setInput(s.id, { tests: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 20" className="input-field" /><p className="mt-1 text-[10px] text-ink-400">الحد الأقصى {MAX_PER_SOURCE}</p></div>
                 </div>
               </div>);})}
             <div className="pt-2 text-center">

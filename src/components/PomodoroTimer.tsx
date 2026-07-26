@@ -1,7 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Coffee, Brain, Settings, X, Check } from 'lucide-react';
+import { Play, Pause, RotateCcw, Coffee, Brain, Settings, X, Check, Flame } from 'lucide-react';
 
 type Phase = 'idle' | 'study' | 'break';
+
+const TOTAL_KEY = 'total_study_seconds';
+
+function loadTotal(): number {
+  try { const v = localStorage.getItem(TOTAL_KEY); return v ? Number(v) || 0 : 0; } catch { return 0; }
+}
+
+function fmtDuration(totalSec: number): string {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  const parts: string[] = [];
+  if (h > 0) parts.push(`${h} ساعة`);
+  if (m > 0) parts.push(`${m} دقيقة`);
+  if (s > 0 || parts.length === 0) parts.push(`${s} ثانية`);
+  return parts.join(' و');
+}
 
 export default function PomodoroTimer() {
   const [studyMinutes, setStudyMinutes] = useState(55);
@@ -11,6 +28,7 @@ export default function PomodoroTimer() {
   const [showSettings, setShowSettings] = useState(false);
   const [tempStudy, setTempStudy] = useState(55);
   const [tempBreak, setTempBreak] = useState(5);
+  const [totalStudy, setTotalStudy] = useState<number>(loadTotal);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = useCallback(() => { if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; } }, []);
@@ -35,7 +53,16 @@ export default function PomodoroTimer() {
 
   useEffect(() => {
     if (phase === 'idle') { clearTimer(); return; }
-    intervalRef.current = setInterval(() => { setSecondsLeft((s) => { if (s <= 1) { handlePhaseEnd(); return 0; } return s - 1; }); }, 1000);
+    intervalRef.current = setInterval(() => {
+      setSecondsLeft((s) => { if (s <= 1) { handlePhaseEnd(); return 0; } return s - 1; });
+      if (phase === 'study') {
+        setTotalStudy((prev) => {
+          const next = prev + 1;
+          try { localStorage.setItem(TOTAL_KEY, String(next)); } catch { /* noop */ }
+          return next;
+        });
+      }
+    }, 1000);
     return clearTimer;
   }, [phase, handlePhaseEnd, clearTimer]);
 
@@ -79,6 +106,13 @@ export default function PomodoroTimer() {
         <div className="flex items-center gap-2">
           {isIdle ? <button onClick={start} className="btn-gold"><Play className="h-5 w-5" />بدء المذاكرة</button>
           : (<><button onClick={pause} className="btn-ghost"><Pause className="h-4 w-4" />إيقاف مؤقت</button><button onClick={reset} className="btn-ghost"><RotateCcw className="h-4 w-4" />إعادة</button></>)}
+        </div>
+        <div className="mt-2 w-full rounded-xl border border-gold-400/20 bg-gold-400/5 px-4 py-3">
+          <div className="flex items-center justify-center gap-2">
+            <Flame className={`h-4 w-4 ${isStudy ? 'text-gold-300 animate-pulse' : 'text-gold-400/70'}`} />
+            <span className="text-xs font-bold text-ink-200">إجمالي وقت المذاكرة</span>
+          </div>
+          <div className="mt-1 text-center font-display text-lg font-bold text-gold-300 tabular-nums">{fmtDuration(totalStudy)}</div>
         </div>
       </div>
       {showSettings && (

@@ -6,12 +6,14 @@ import Home from './pages/Home';
 import QiyasSection from './pages/QiyasSection';
 import TahsiliSection from './pages/TahsiliSection';
 import MySchedule from './pages/MySchedule';
+import Notes from './pages/Notes';
 import AuthPage from './pages/AuthPage';
 import TelegramGate from './components/TelegramGate';
+import Toast from './components/Toast';
 import { Loader2 } from 'lucide-react';
 
 function AppContent() {
-  const { page, telegramGateOpen, telegramGateMode, setTelegramGate, handleTelegramVerified } = useApp();
+  const { page, telegramGateOpen, telegramGateMode, setTelegramGate, handleTelegramVerified, generateError, setGenerateError } = useApp();
   return (
     <div className="flex min-h-screen flex-col">
       <Navbar />
@@ -20,6 +22,7 @@ function AppContent() {
         {page === 'qiyas' && <QiyasSection />}
         {page === 'tahsili' && <TahsiliSection />}
         {page === 'schedule' && <MySchedule />}
+        {page === 'notes' && <Notes />}
       </main>
       <Footer />
       <TelegramGate
@@ -28,6 +31,7 @@ function AppContent() {
         onVerified={handleTelegramVerified}
         onClose={() => setTelegramGate(false)}
       />
+      <Toast open={!!generateError} onClose={() => setGenerateError(null)} message={generateError ?? ''} />
     </div>
   );
 }

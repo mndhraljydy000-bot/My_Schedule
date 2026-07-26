@@ -1,7 +1,7 @@
 import { useApp, type Page } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import Toast from './Toast';
-import { Home, Brain, GraduationCap, CalendarDays, Menu, X, Flame, LogOut, Cloud } from 'lucide-react';
+import { Home, Brain, GraduationCap, CalendarDays, Menu, X, Flame, LogOut, Cloud, NotebookPen } from 'lucide-react';
 import { useState } from 'react';
 
 const NAV_ITEMS: { id: Page; label: string; icon: typeof Home }[] = [
@@ -9,6 +9,7 @@ const NAV_ITEMS: { id: Page; label: string; icon: typeof Home }[] = [
   { id: 'qiyas', label: 'القدرات', icon: Brain },
   { id: 'tahsili', label: 'التحصيلي', icon: GraduationCap },
   { id: 'schedule', label: 'جدولي', icon: CalendarDays },
+  { id: 'notes', label: 'المذكرة', icon: NotebookPen },
 ];
 
 export default function Navbar() {

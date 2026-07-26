@@ -168,8 +168,8 @@ export default function ScheduleConfigForm({ showSubjectOrder = false }: { showS
             {reviewConfig.mode === 'interval-days' && (
               <div className="animate-fade-in rounded-xl border border-ink-700 bg-ink-800/40 p-4">
                 <label className="mb-1.5 block text-xs font-bold text-ink-200">يوم مراجعة واحد بعد كل:</label>
-                <div className="flex items-center gap-2"><input type="number" min={1} max={30} value={reviewConfig.intervalDays} onChange={(e) => setReviewConfig({ intervalDays: Math.max(1, Number(e.target.value)) })} className="input-field w-24" /><span className="text-sm text-ink-200">أيام مذاكرة متتالية</span></div>
-                <p className="mt-2 text-[11px] text-ink-400">مثلاً: 10 يعني يوم مراجعة بعد كل 10 أيام مذاكرة</p>
+                <div className="flex items-center gap-2"><input type="number" min={1} max={15} value={reviewConfig.intervalDays ?? ''} onChange={(e) => { const v = e.target.value === '' ? null : Math.min(15, Math.max(1, Number(e.target.value))); setReviewConfig({ intervalDays: v }); }} className="input-field w-24" /><span className="text-sm text-ink-200">أيام مذاكرة متتالية</span></div>
+                <p className="mt-2 text-[11px] text-ink-400">مثلاً: 10 يعني يوم مراجعة بعد كل 10 أيام مذاكرة (الحد الأقصى 15)</p>
               </div>
             )}
 
@@ -180,8 +180,8 @@ export default function ScheduleConfigForm({ showSubjectOrder = false }: { showS
                 </div>
                 <div className="rounded-xl border border-ink-700 bg-ink-800/40 p-4">
                   <label className="mb-1.5 block text-xs font-bold text-ink-200">عدد أيام المراجعة بعد كل مرحلة/مادة:</label>
-                  <div className="flex items-center gap-2"><input type="number" min={1} max={30} value={reviewConfig.phaseReviewDays} onChange={(e) => setReviewConfig({ phaseReviewDays: Math.max(1, Number(e.target.value)) })} className="input-field w-24" /><span className="text-sm text-ink-200">أيام مراجعة</span></div>
-                  <p className="mt-2 text-[11px] text-ink-400">مثلاً: 5 يعني 5 أيام مراجعة بعد إنهاء الرياضيات قبل بدء الفيزياء، أو بعد التأسيس قبل التدريب</p>
+                  <div className="flex items-center gap-2"><input type="number" min={1} max={10} value={reviewConfig.phaseReviewDays ?? ''} onChange={(e) => { const v = e.target.value === '' ? null : Math.min(10, Math.max(1, Number(e.target.value))); setReviewConfig({ phaseReviewDays: v }); }} className="input-field w-24" /><span className="text-sm text-ink-200">أيام مراجعة</span></div>
+                  <p className="mt-2 text-[11px] text-ink-400">مثلاً: 5 يعني 5 أيام مراجعة بعد إنهاء الرياضيات قبل بدء الفيزياء، أو بعد التأسيس قبل التدريب (الحد الأقصى 10)</p>
                 </div>
               </div>
             )}

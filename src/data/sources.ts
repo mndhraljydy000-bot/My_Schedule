@@ -2,7 +2,7 @@ export type TestType = 'qiyas' | 'tahsili';
 export type SourceCategory = 'foundation' | 'training-quant' | 'training-verbal';
 export type TahsiliSubject = 'math' | 'physics' | 'chemistry' | 'biology';
 export type ReviewMode = 'none' | 'weekly-days' | 'interval-days' | 'phase-end';
-export type Page = 'home' | 'qiyas' | 'tahsili' | 'schedule';
+export type Page = 'home' | 'qiyas' | 'tahsili' | 'schedule' | 'notes';
 
 export interface Source {
   id: string;
@@ -45,6 +45,7 @@ export interface Schedule {
   totalVideos: number;
   totalTests: number;
   error?: string;
+  warning?: { suggestedEndDate: string; neededDays: number; availableDays: number };
 }
 
 export const ARABIC_MONTHS = [

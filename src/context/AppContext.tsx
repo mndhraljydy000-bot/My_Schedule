@@ -20,8 +20,8 @@ interface ReviewConfig {
   enabled: boolean;
   mode: ReviewMode;
   weeklyDays: number[];
-  intervalDays: number;
-  phaseReviewDays: number;
+  intervalDays: number | null;
+  phaseReviewDays: number | null;
 }
 
 interface AppContextValue {
@@ -76,11 +76,16 @@ interface AppContextValue {
   setTelegramVerified: (v: boolean) => void;
   pendingGenerate: TestType | null;
   setPendingGenerate: (t: TestType | null) => void;
+
+  notes: string;
+  setNotes: (n: string) => void;
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
 
 const STORAGE_KEY = 'study-planner-state-v3';
+
+export const MAX_PER_SOURCE = 150;
 
 type PersistedState = {
   page?: Page;
@@ -92,6 +97,7 @@ type PersistedState = {
   scheduleConfig?: ScheduleConfig;
   reviewConfig?: ReviewConfig;
   tahsiliSubjectOrder?: string[];
+  notes?: string;
 };
 
 function loadLocalState(): PersistedState {
@@ -109,11 +115,11 @@ const DEFAULT_SCHEDULE_CONFIG: ScheduleConfig = {
 };
 
 const DEFAULT_REVIEW_CONFIG: ReviewConfig = {
-  enabled: true,
+  enabled: false,
   mode: 'phase-end',
-  weeklyDays: [4],
-  intervalDays: 6,
-  phaseReviewDays: 2,
+  weeklyDays: [],
+  intervalDays: null,
+  phaseReviewDays: null,
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -128,10 +134,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [streak, setStreak] = useState<number>(saved.streak ?? 0);
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
   const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [telegramVerified, setTelegramVerified] = useState<boolean>(() => localStorage.getItem('tg_verified') === 'true');
   const [telegramGateOpen, setTelegramGateOpen] = useState(false);
   const [telegramGateMode, setTelegramGateMode] = useState<'generate' | 'rejoin'>('generate');
   const [pendingGenerate, setPendingGenerate] = useState<TestType | null>(null);
+  const [notes, setNotes] = useState<string>(saved.notes ?? '');
 
   const setTelegramGate = (open: boolean, mode: 'generate' | 'rejoin' = 'generate') => {
     setTelegramGateOpen(open);
@@ -169,13 +177,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (s.scheduleConfig !== undefined) setScheduleConfigState(s.scheduleConfig);
       if (s.reviewConfig !== undefined) setReviewConfigState(s.reviewConfig);
       if (s.tahsiliSubjectOrder !== undefined) setTahsiliSubjectOrderState(s.tahsiliSubjectOrder);
+      if (s.notes !== undefined) setNotes(s.notes);
     })();
   }, [user]);
 
   const getStateSnapshot = useCallback((): PersistedState => ({
     page, selectedSources, inputs, schedule, scheduleConfirmed, streak,
-    scheduleConfig, reviewConfig, tahsiliSubjectOrder,
-  }), [page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder]);
+    scheduleConfig, reviewConfig, tahsiliSubjectOrder, notes,
+  }), [page, selectedSources, inputs, schedule, scheduleConfirmed, streak, scheduleConfig, reviewConfig, tahsiliSubjectOrder, notes]);
 
   // Sync to localStorage always
   useEffect(() => {
@@ -245,11 +254,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const isSourceSelected = (id: string) => selectedSources.some((s) => s.id === id);
 
   const setInput = (id: string, input: Partial<SourceInput>) => {
-    setInputs((prev) => ({ ...prev, [id]: { ...(prev[id] ?? { videos: 0, tests: 0 }), ...input } }));
+    setInputs((prev) => {
+      const base = prev[id] ?? { videos: 0, tests: 0 };
+      const merged = { ...base, ...input };
+      if (merged.videos > MAX_PER_SOURCE) merged.videos = MAX_PER_SOURCE;
+      if (merged.tests > MAX_PER_SOURCE) merged.tests = MAX_PER_SOURCE;
+      return { ...prev, [id]: merged };
+    });
   };
 
   const setScheduleConfig = (c: Partial<ScheduleConfig>) => setScheduleConfigState((p) => ({ ...p, ...c }));
-  const setReviewConfig = (r: Partial<ReviewConfig>) => setReviewConfigState((p) => ({ ...p, ...r }));
+  const setReviewConfig = (r: Partial<ReviewConfig>) => setReviewConfigState((p) => {
+    const merged = { ...p, ...r };
+    if (merged.phaseReviewDays !== null && merged.phaseReviewDays > 10) merged.phaseReviewDays = 10;
+    if (merged.intervalDays !== null && merged.intervalDays > 15) merged.intervalDays = 15;
+    return merged;
+  });
   const setTahsiliSubjectOrder = (order: string[]) => setTahsiliSubjectOrderState(order);
 
   const handleTelegramVerified = () => {
@@ -262,6 +282,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (result.success) {
         setPage('schedule');
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (result.error) {
+        setGenerateError(result.error);
       }
     }
   };
@@ -272,6 +294,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (result.success) {
         setPage('schedule');
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      } else if (result.error) {
+        setGenerateError(result.error);
       }
       return;
     }
@@ -293,6 +317,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     let { startDate, endDate, offDays } = scheduleConfig;
+    if (reviewConfig.enabled) {
+      if (reviewConfig.mode === 'interval-days' && (reviewConfig.intervalDays === null || reviewConfig.intervalDays <= 0)) {
+        return { success: false, error: 'اخترت المراجعة لكن لم تحدد عدد الأيام المتتالية' };
+      }
+      if (reviewConfig.mode === 'phase-end' && (reviewConfig.phaseReviewDays === null || reviewConfig.phaseReviewDays <= 0)) {
+        return { success: false, error: 'اخترت المراجعة لكن لم تحدد عدد أيام مراجعة المرحلة' };
+      }
+      if (reviewConfig.mode === 'weekly-days' && reviewConfig.weeklyDays.length === 0) {
+        return { success: false, error: 'اخترت المراجعة لكن لم تحدد أيام المراجعة الأسبوعية' };
+      }
+    }
+    const phaseReviewDays = reviewConfig.phaseReviewDays !== null ? Math.min(10, Math.max(1, reviewConfig.phaseReviewDays)) : 0;
+    const intervalDays = reviewConfig.intervalDays !== null ? Math.min(15, Math.max(1, reviewConfig.intervalDays)) : 0;
     if (!startDate || !endDate || new Date(endDate) < new Date(startDate)) {
       return { success: false, error: 'تحقق من تواريخ البداية والنهاية' };
     }
@@ -398,54 +435,89 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const tasksPerDay = Math.max(1, Math.ceil(flatTasks.length / studyDates.length));
-
-    const days: ScheduleDay[] = [];
-    let taskIdx = 0;
-    let studyDaysSinceReview = 0;
-    let currentPhase = flatTasks[0]?.phase ?? '';
-
-    for (let d = 0; d < studyDates.length; d++) {
-      const date = studyDates[d];
-
-      let isReview = false;
-      if (reviewConfig.enabled) {
-        if (reviewConfig.mode === 'weekly-days' && reviewConfig.weeklyDays.includes(getDayOfWeek(date))) isReview = true;
-        else if (reviewConfig.mode === 'interval-days' && studyDaysSinceReview >= reviewConfig.intervalDays) isReview = true;
-        else if (reviewConfig.mode === 'phase-end' && flatTasks[taskIdx] && flatTasks[taskIdx].phase !== currentPhase && currentPhase) {
-          const prevPhase = currentPhase;
-          for (let r = 0; r < reviewConfig.phaseReviewDays && d < studyDates.length; r++) {
-            days.push({ dayIndex: days.length, date: studyDates[d], tasks: [{ id: `rev-${days.length}`, type: 'review', label: `مراجعة مرحلية - ${prevPhase}`, sourceId: 'review', done: false }], phase: 'مراجعة', isReviewDay: true, done: false });
-            d++;
+    const buildDays = (dates: string[], tpd: number): { days: ScheduleDay[]; taskIdx: number } => {
+      const out: ScheduleDay[] = [];
+      let ti = 0;
+      let sinceReview = 0;
+      let curPhase = flatTasks[0]?.phase ?? '';
+      for (let d = 0; d < dates.length; d++) {
+        const date = dates[d];
+        let isReview = false;
+        if (reviewConfig.enabled) {
+          if (reviewConfig.mode === 'weekly-days' && reviewConfig.weeklyDays.includes(getDayOfWeek(date))) isReview = true;
+          else if (reviewConfig.mode === 'interval-days' && sinceReview >= intervalDays) isReview = true;
+          else if (reviewConfig.mode === 'phase-end' && flatTasks[ti] && flatTasks[ti].phase !== curPhase && curPhase) {
+            const prevPhase = curPhase;
+            for (let r = 0; r < phaseReviewDays && d < dates.length; r++) {
+              out.push({ dayIndex: out.length, date: dates[d], tasks: [{ id: `rev-${out.length}`, type: 'review', label: `مراجعة مرحلية - ${prevPhase}`, sourceId: 'review', done: false }], phase: 'مراجعة', isReviewDay: true, done: false });
+              d++;
+            }
+            if (d < dates.length) curPhase = flatTasks[ti]?.phase ?? curPhase;
+            sinceReview = 0;
           }
-          if (d < studyDates.length) currentPhase = flatTasks[taskIdx]?.phase ?? currentPhase;
-          studyDaysSinceReview = 0;
+        }
+        if (d >= dates.length) break;
+        const dayTasks: ScheduleTask[] = [];
+        if (!isReview) {
+          const phase = flatTasks[ti]?.phase ?? curPhase;
+          for (let t = 0; t < tpd && ti < flatTasks.length; t++) {
+            const ft = flatTasks[ti];
+            dayTasks.push({ id: `${d}-${t}`, type: ft.type, label: ft.label, sourceId: ft.sourceId, done: false });
+            ti++;
+          }
+          sinceReview++;
+          out.push({ dayIndex: out.length, date, tasks: dayTasks, phase, isReviewDay: false, done: false });
+        } else {
+          dayTasks.push({ id: `rev-${d}`, type: 'review', label: 'يوم مراجعة - راجع ما سبق', sourceId: 'review', done: false });
+          sinceReview = 0;
+          out.push({ dayIndex: out.length, date, tasks: dayTasks, phase: 'مراجعة', isReviewDay: true, done: false });
+        }
+        if (ti >= flatTasks.length && !reviewConfig.enabled) break;
+      }
+      return { days: out, taskIdx: ti };
+    };
+
+    const tasksPerDay = Math.max(1, Math.ceil(flatTasks.length / studyDates.length));
+    const { days, taskIdx } = buildDays(studyDates, tasksPerDay);
+
+    // Insert rest days for off days that fall between scheduled days
+    const fullDays: ScheduleDay[] = [];
+    for (let i = 0; i < days.length; i++) {
+      fullDays.push(days[i]);
+      if (i < days.length - 1) {
+        let checkDate = addDaysISO(days[i].date, 1);
+        while (checkDate < days[i + 1].date) {
+          if (isOffDay(checkDate)) {
+            fullDays.push({ dayIndex: 0, date: checkDate, tasks: [], phase: 'إجازة', isReviewDay: false, isRestDay: true, done: false });
+          }
+          checkDate = addDaysISO(checkDate, 1);
         }
       }
+    }
+    const reindexed = fullDays.map((d, i) => ({ ...d, dayIndex: i }));
 
-      if (d >= studyDates.length) break;
+    const endDateActual = reindexed.length > 0 ? reindexed[reindexed.length - 1].date : endDate;
 
-      const dayTasks: ScheduleTask[] = [];
-      if (!isReview) {
-        const phase = flatTasks[taskIdx]?.phase ?? currentPhase;
-        for (let t = 0; t < tasksPerDay && taskIdx < flatTasks.length; t++) {
-          const ft = flatTasks[taskIdx];
-          dayTasks.push({ id: `${d}-${t}`, type: ft.type, label: ft.label, sourceId: ft.sourceId, done: false });
-          taskIdx++;
-        }
-        studyDaysSinceReview++;
-        days.push({ dayIndex: days.length, date, tasks: dayTasks, phase, isReviewDay: false, done: false });
-      } else {
-        dayTasks.push({ id: `rev-${d}`, type: 'review', label: 'يوم مراجعة - راجع ما سبق', sourceId: 'review', done: false });
-        studyDaysSinceReview = 0;
-        days.push({ dayIndex: days.length, date, tasks: dayTasks, phase: 'مراجعة', isReviewDay: true, done: false });
+    let warning: Schedule['warning'] | undefined;
+    if (taskIdx < flatTasks.length) {
+      let probe = addDaysISO(endDate, 1);
+      let extended = [...studyDates];
+      while (taskIdx < flatTasks.length && probe) {
+        if (!isOffDay(probe)) extended.push(probe);
+        probe = addDaysISO(probe, 1);
+        if (extended.length > 10000) break;
       }
-
-      if (taskIdx >= flatTasks.length && !reviewConfig.enabled) break;
+      const { taskIdx: fitIdx } = buildDays(extended, tasksPerDay);
+      if (fitIdx >= flatTasks.length) {
+        warning = {
+          suggestedEndDate: extended[extended.length - 1],
+          neededDays: extended.length,
+          availableDays: studyDates.length,
+        };
+      }
     }
 
-    const endDateActual = days.length > 0 ? days[days.length - 1].date : endDate;
-    setSchedule({ testType, startDate, endDate: endDateActual, days, totalVideos, totalTests });
+    setSchedule({ testType, startDate, endDate: endDateActual, days: reindexed, totalVideos, totalTests, warning });
     setScheduleConfirmed(false);
     return { success: true };
   };
@@ -534,6 +606,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     telegramVerified, telegramGateOpen, telegramGateMode, setTelegramGate,
     setTelegramVerified, pendingGenerate, setPendingGenerate,
     requestGenerate, handleTelegramVerified,
+    notes, setNotes,
+    generateError, setGenerateError,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

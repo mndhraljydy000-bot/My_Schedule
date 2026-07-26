@@ -13,7 +13,7 @@ import {
   CalendarDays, CheckCircle2, Circle, PlayCircle, FileText,
   Sparkles, Trash2, Layers, TrendingUp, ChevronRight, ChevronLeft,
   Coffee, Lock, AlertCircle, Flame, CheckCheck, Clock, Check, RefreshCw,
-  CalendarClock, Plane, X,
+  CalendarClock, Plane, X, NotebookPen, ArrowRight,
 } from 'lucide-react';
 import { todayISO, addDaysISO, formatArabicDateShort } from '../utils/scheduler';
 
@@ -50,6 +50,9 @@ export default function MySchedule() {
   const [postponeDays, setPostponeDays] = useState(1);
   const [postponeDone, setPostponeDone] = useState(false);
   const [rejoinGateOpen, setRejoinGateOpen] = useState(false);
+  const [showDaysWarning, setShowDaysWarning] = useState(false);
+
+  useEffect(() => { if (schedule?.warning) setShowDaysWarning(true); }, [schedule?.warning]);
 
   // Background membership check on page load / refresh
   useEffect(() => {
@@ -140,10 +143,42 @@ export default function MySchedule() {
             </div>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
-            <button onClick={confirmSchedule} className="btn-gold"><CheckCheck className="h-5 w-5" />تأكيد الجدول وبدء المتابعة</button>
+            <button onClick={() => { if (schedule.warning) setShowDaysWarning(true); else confirmSchedule(); }} className="btn-gold"><CheckCheck className="h-5 w-5" />تأكيد الجدول وبدء المتابعة</button>
             <button onClick={() => { clearSchedule(); setPage('qiyas'); }} className="btn-ghost"><Trash2 className="h-4 w-4 text-red-400" />تعديل المصادر</button>
           </div>
         </div>
+
+        {showDaysWarning && schedule.warning && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowDaysWarning(false)}>
+            <div className="card mx-4 max-w-md animate-pop p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-red-500/10 border border-red-500/30"><AlertCircle className="h-7 w-7 text-red-400" /></div>
+              <h3 className="mb-2 text-center font-display text-lg font-bold text-white">الأيام لا تكفي لخطة المذاكرة</h3>
+              <p className="mb-4 text-center text-xs leading-relaxed text-ink-400">لكي ينجح الجدول، يجب أن تكفي الأيام المتاحة لجميع المهام والمراجعات. يرجى العودة لتعديل الجدول: إما بتقليل عدد المهام (الفيديوهات أو الاختبارات)، أو بمدّ تاريخ النهاية حتى يصبح عدد الأيام كافياً.</p>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => { setShowDaysWarning(false); clearSchedule(); setPage('tahsili'); }} className="btn-gold w-full"><ArrowRight className="h-5 w-5 text-gold-300" />العودة لتعديل الجدول</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (scheduleConfirmed && !telegramVerified) {
+    return (
+      <div className="animate-fade-in px-4 py-16 sm:px-6">
+        <div className="mx-auto max-w-lg text-center">
+          <div className="mx-auto mb-6 grid h-20 w-20 place-items-center rounded-3xl bg-red-500/10 border border-red-500/30"><Lock className="h-9 w-9 text-red-400" /></div>
+          <h1 className="section-title text-2xl text-white">الجدول مقفل</h1>
+          <p className="mt-3 text-sm leading-relaxed text-ink-300">يبدو أنك غادرت مجموعة التليجرام. لا يمكنك استخدام جدولك الحالي حتى تعود للانضمام للمجموعة من جديد.</p>
+          <button onClick={() => setRejoinGateOpen(true)} className="btn-gold mt-6"><RefreshCw className="h-4 w-4" />إعادة التحقق من العضوية</button>
+        </div>
+        <TelegramGate
+          open={rejoinGateOpen}
+          mode="rejoin"
+          onVerified={() => { setRejoinGateOpen(false); setTelegramVerified(true); try { localStorage.setItem('tg_verified', 'true'); } catch { /* noop */ } }}
+          onClose={() => setRejoinGateOpen(false)}
+        />
       </div>
     );
   }
@@ -193,8 +228,9 @@ export default function MySchedule() {
           <StatCard icon={TrendingUp} label="نسبة الإنجاز" value={`${progress}%`} color="sky" />
         </div>
 
-        <div className="mb-6 flex justify-center">
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
           <button onClick={() => { setPostponeDays(1); setPostponeDone(false); setShowPostpone(true); }} className="btn-ghost w-full sm:w-auto"><CalendarClock className="h-4 w-4 text-sky-400" />تأجيل المهام</button>
+          <button onClick={() => setPage('notes')} className="btn-ghost w-full sm:w-auto"><NotebookPen className="h-4 w-4 text-gold-300" />المذكرة</button>
         </div>
 
         {scheduleConfig.offDays.length > 0 && (<div className="mb-4 flex items-center gap-2 text-xs text-ink-300"><Coffee className="h-4 w-4 text-gold-300" /><span>أيام الإجازة: {scheduleConfig.offDays.map((d) => ARABIC_DAYS_SHORT[d]).join('، ')}</span></div>)}
@@ -336,13 +372,18 @@ export default function MySchedule() {
           message="هل أنت متأكد من حذف الجدول؟ سيتم حذف جميع المهام والتقدم والشعلة. لا يمكن التراجع عن هذا الإجراء."
         />
 
-        {/* Rejoin gate for users who left the Telegram group */}
-        <TelegramGate
-          open={rejoinGateOpen}
-          mode="rejoin"
-          onVerified={() => { setRejoinGateOpen(false); setTelegramVerified(true); try { localStorage.setItem('tg_verified', 'true'); } catch { /* noop */ } }}
-          onClose={() => setRejoinGateOpen(false)}
-        />
+        {showDaysWarning && schedule.warning && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowDaysWarning(false)}>
+            <div className="card mx-4 max-w-md animate-pop p-6" onClick={(e) => e.stopPropagation()}>
+              <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-full bg-red-500/10 border border-red-500/30"><AlertCircle className="h-7 w-7 text-red-400" /></div>
+              <h3 className="mb-2 text-center font-display text-lg font-bold text-white">الأيام لا تكفي لخطة المذاكرة</h3>
+              <p className="mb-4 text-center text-xs leading-relaxed text-ink-400">لكي ينجح الجدول، يجب أن تكفي الأيام المتاحة لجميع المهام والمراجعات. يرجى العودة لتعديل الجدول: إما بتقليل عدد المهام (الفيديوهات أو الاختبارات)، أو بمدّ تاريخ النهاية حتى يصبح عدد الأيام كافياً.</p>
+              <div className="flex flex-col gap-2">
+                <button onClick={() => { setShowDaysWarning(false); clearSchedule(); setPage('tahsili'); }} className="btn-gold w-full"><ArrowRight className="h-5 w-5 text-gold-300" />العودة لتعديل الجدول</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showPostpone && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-ink-950/80 backdrop-blur-sm animate-fade-in" onClick={() => setShowPostpone(false)}>
