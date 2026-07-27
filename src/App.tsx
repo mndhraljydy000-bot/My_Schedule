@@ -1,3 +1,5 @@
+import { useEffect } from 'react';
+import ReactGA from 'react-ga4';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
 import Navbar from './components/Navbar';
@@ -15,6 +17,11 @@ import { Loader2 } from 'lucide-react';
 
 function AppContent() {
   const { page, telegramGateOpen, telegramGateMode, setTelegramGate, handleTelegramVerified, generateError, setGenerateError } = useApp();
+
+  useEffect(() => {
+    ReactGA.send({ hitType: 'pageview', page: `/${page}`, title: page });
+  }, [page]);
+
   return (
     <div className="flex min-h-screen flex-col">
       <Navbar />
