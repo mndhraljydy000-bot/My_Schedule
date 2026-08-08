@@ -86,6 +86,12 @@ const AppContext = createContext<AppContextValue | null>(null);
 const STORAGE_KEY = 'study-planner-state-v3';
 
 export const MAX_PER_SOURCE = 150;
+export const MAX_PER_SOURCE_EIHAB = 300;
+const EIHAB_SOURCE_ID = 'q-t3';
+
+export function getMaxForSource(id: string): number {
+  return id === EIHAB_SOURCE_ID ? MAX_PER_SOURCE_EIHAB : MAX_PER_SOURCE;
+}
 
 type PersistedState = {
   page?: Page;
@@ -257,8 +263,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setInputs((prev) => {
       const base = prev[id] ?? { videos: 0, tests: 0 };
       const merged = { ...base, ...input };
-      if (merged.videos > MAX_PER_SOURCE) merged.videos = MAX_PER_SOURCE;
-      if (merged.tests > MAX_PER_SOURCE) merged.tests = MAX_PER_SOURCE;
+      const max = getMaxForSource(id);
+      if (merged.videos > max) merged.videos = max;
+      if (merged.tests > max) merged.tests = max;
       return { ...prev, [id]: merged };
     });
   };

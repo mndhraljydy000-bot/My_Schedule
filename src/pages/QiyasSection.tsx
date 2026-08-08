@@ -4,7 +4,7 @@ import type { TestType, SourceCategory, Source } from '../data/sources';
 import { getSourcesByCategory } from '../data/sources';
 import ScheduleConfigForm from '../components/ScheduleConfigForm';
 import { BookMarked, Calculator, BookOpen, Check, Plus, X, Sparkles, ChevronLeft, Layers, ArrowLeft, PlayCircle, FileText, ChevronDown, AlertCircle } from 'lucide-react';
-import { MAX_PER_SOURCE } from '../context/AppContext';
+import { getMaxForSource } from '../context/AppContext';
 
 const CATEGORY_META: Record<SourceCategory, { label: string; icon: typeof BookMarked; color: string; bg: string; border: string }> = {
   'foundation': { label: 'التأسيس', icon: BookMarked, color: 'text-gold-300', bg: 'from-gold-300/10 to-gold-500/5', border: 'border-gold-400/40' },
@@ -68,8 +68,8 @@ export default function QiyasSection() {
               <div key={s.id} className="card animate-fade-up p-5 sm:p-6" style={{ animationDelay: `${i * 80}ms` }}>
                 <div className="mb-4 flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-gold-400/15 font-display text-sm font-bold text-gold-300">{i + 1}</span><h3 className="font-display text-lg font-bold text-white">{s.name}</h3></div>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><PlayCircle className="h-3.5 w-3.5 text-sky-400" />عدد فيديوهات الشرح</label><input type="number" min={0} max={MAX_PER_SOURCE} value={inp.videos || ''} onChange={(e) => setInput(s.id, { videos: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 50" className="input-field" /><p className="mt-1 text-[10px] text-ink-400">الحد الأقصى {MAX_PER_SOURCE}</p></div>
-                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><FileText className="h-3.5 w-3.5 text-gold-300" />عدد الاختبارات</label><input type="number" min={0} max={MAX_PER_SOURCE} value={inp.tests || ''} onChange={(e) => setInput(s.id, { tests: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 20" className="input-field" /><p className="mt-1 text-[10px] text-ink-400">الحد الأقصى {MAX_PER_SOURCE}</p></div>
+                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><PlayCircle className="h-3.5 w-3.5 text-sky-400" />عدد فيديوهات الشرح</label><input type="number" min={0} max={getMaxForSource(s.id)} value={inp.videos || ''} onChange={(e) => setInput(s.id, { videos: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 50" className="input-field" /><p className="mt-1 text-[10px] text-ink-400">الحد الأقصى {getMaxForSource(s.id)}</p></div>
+                  <div><label className="mb-1.5 flex items-center gap-1.5 text-xs font-bold text-ink-200"><FileText className="h-3.5 w-3.5 text-gold-300" />عدد الاختبارات</label><input type="number" min={0} max={getMaxForSource(s.id)} value={inp.tests || ''} onChange={(e) => setInput(s.id, { tests: Math.max(0, Number(e.target.value)) })} placeholder="مثال: 20" className="input-field" /><p className="mt-1 text-[10px] text-ink-400">الحد الأقصى {getMaxForSource(s.id)}</p></div>
                 </div>
               </div>);})}
             <div className="pt-2 text-center">
